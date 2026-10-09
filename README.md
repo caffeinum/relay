@@ -3,6 +3,8 @@
 A native macOS Slack client that opens instantly and runs from the keyboard.
 The Slack web app is slow, and even editing a message takes Up + E.
 
+Not to be confused with team2027/chatbot, an unrelated project.
+
 ## Plan
 
 **How it works.** A native macOS app built the same way as
