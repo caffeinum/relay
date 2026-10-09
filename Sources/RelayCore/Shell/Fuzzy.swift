@@ -54,6 +54,7 @@ public struct Fuzzy {
             i += 1
         }
         if best > 0 { return best + short }
+        if w.count >= 3 { return initials(w, h).map { max(1, 100 + 20 * $0.hits - 5 * $0.gaps + short / 4) } ?? 0 }
         var hits = 0, gaps = 0, k = 0, prev = -1
         for (p, c) in h.enumerated() where k < w.count && c == w[k] {
             if p == 0 || boundary(h[p - 1]) { hits += 1 }
@@ -63,5 +64,23 @@ public struct Fuzzy {
         }
         guard k == w.count else { return 0 }
         return max(1, 100 + 20 * hits - 5 * gaps + short / 4)
+    }
+
+    /// From three characters on, a scattered match only counts when each
+    /// piece starts a word: "mcr" finds "mark channel read", "des" doesn't
+    /// find "delete message".
+    static func initials(_ w: [UInt8], _ h: [UInt8]) -> (hits: Int, gaps: Int)? {
+        var k = 0, p = 0, hits = 0, gaps = 0
+        while k < w.count {
+            if k > 0, p < h.count, h[p] == w[k] { p += 1; k += 1; continue }
+            var q = p
+            while q < h.count, !(h[q] == w[k] && (q == 0 || boundary(h[q - 1]))) { q += 1 }
+            guard q < h.count else { return nil }
+            if k > 0 { gaps += 1 }
+            hits += 1
+            p = q + 1
+            k += 1
+        }
+        return (hits, gaps)
     }
 }

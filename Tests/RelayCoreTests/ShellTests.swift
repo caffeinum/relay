@@ -68,10 +68,10 @@ private func conv(_ id: String, _ name: String, _ kind: Conversation.Kind = .cha
     let sections = [SectionState(id: "a", name: "A", channels: ["#customers", "C3"]),
                     SectionState(id: "b", name: "B", channels: ["customers", "ghost"])]
     let p = Sections.place(cs, sections: sections, starred: ["C1"], current: nil, drafts: [])
-    #expect(p.groups.map(\.name) == ["Starred", "A", "B", "Direct messages"])
-    #expect(p.groups[0].rows.map(\.id) == ["C1"])
-    #expect(p.groups[1].rows.map(\.id).sorted() == ["C2", "C3"])
-    #expect(p.groups[2].rows.isEmpty)
+    #expect(p.groups.map(\.name) == ["A", "B", "Starred", "Direct messages"])
+    #expect(p.groups[2].rows.map(\.id) == ["C1"])
+    #expect(p.groups[0].rows.map(\.id).sorted() == ["C2", "C3"])
+    #expect(p.groups[1].rows.isEmpty)
     #expect(p.groups[3].rows.map(\.id) == ["D1"])
     #expect(p.missing == ["ghost"])
 }
@@ -127,4 +127,51 @@ private func conv(_ id: String, _ name: String, _ kind: Conversation.Kind = .cha
     let budget = 2.0
     #endif
     #expect(ms < budget, "rank took \(ms)ms")
+}
+
+@Test func fuzzyLongQueriesNeedWordStartPieces() {
+    let f = Fuzzy(["Delete message", "Oldest loaded message", "#design", "Mark channel read"])
+    let des = f.rank("des", limit: 5).map(\.0)
+    #expect(des.first == 2)
+    #expect(!des.contains(0))
+    #expect(f.rank("mcr", limit: 5).map(\.0) == [3])
+    #expect(f.rank("dm", limit: 5).map(\.0).contains(0))
+}
+
+@Test func configSectionsCarryEmojiAndCollapsed() throws {
+    let json = #"{"workspace":"w","workspaces":{"w":{"api":"http://x/api"}},"sections":[{"name":"Customers","channels":["customers"],"emoji":"✅","collapsed":true},{"name":"Plain","channels":[]}]}"#
+    let c = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
+    let seeded = Sections.seed(c.sections ?? [])
+    #expect(seeded[0].icon == "✅")
+    #expect(seeded[0].collapsed)
+    #expect(seeded[1].icon == nil)
+    #expect(!seeded[1].collapsed)
+    let old = [SectionState(id: "s0", name: "customers", channels: []), SectionState(id: "s1", name: "Plain", icon: "★", channels: [])]
+    #expect(Sections.backfillIcons(old, from: c.sections ?? []).map(\.icon) == ["✅", "★"])
+}
+
+@Test func sectionsComeBeforeStarred() {
+    let cs = [conv("C1", "general"), conv("C2", "customers")]
+    let p = Sections.place(cs, sections: [SectionState(id: "a", name: "A", channels: ["customers"])], starred: ["C1", "C2"], current: nil, drafts: [])
+    #expect(p.groups.map(\.name) == ["A", "Starred"])
+    #expect(p.groups[1].rows.map(\.id) == ["C1"])
+}
+
+@Test func reorderMovesASectionAndClamps() {
+    let s = ["a", "b", "c"].map { SectionState(id: $0, name: $0, channels: []) }
+    #expect(Sections.reorder(s, "c", by: -1).map(\.id) == ["a", "c", "b"])
+    #expect(Sections.reorder(s, "a", by: -1).map(\.id) == ["a", "b", "c"])
+    #expect(Sections.reorder(s, "a", by: 1).map(\.id) == ["b", "a", "c"])
+    #expect(Sections.reorder(s, "x", by: 1) == s)
+}
+
+@Test func configUpdateWritesTheFileAtomicallyAndKeepsOtherKeys() throws {
+    let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("relay-config-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try Config(workspace: "w", workspaces: ["w": .init(api: "http://x/api")], sections: [.init(name: "S", channels: ["a"])]).save(to: url)
+    let c = try Config.update(at: url) { $0.undoSeconds = 10; $0.showSeconds = true }
+    let back = try Config.load(from: url)
+    #expect(back == c)
+    #expect(back.undoSeconds == 10 && back.showSeconds == true)
+    #expect(back.sections?.first?.channels == ["a"])
 }

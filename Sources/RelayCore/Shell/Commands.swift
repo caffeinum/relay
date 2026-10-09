@@ -11,6 +11,7 @@ public enum CommandID: String, CaseIterable, Codable {
     case toggleSidebar, toggleThread, closeThread, threads, drafts, editLast
     case star, moveToSection, newSection, renameSection, deleteSection, collapseSection, collapseAll
     case copyChannelLink, back, forward
+    case toggleSeconds, undoWindow
     case toggleAppearance, switchWorkspace, openLog, openConfig, revealDatabase, quit
 }
 
@@ -81,6 +82,8 @@ public enum Commands {
         Command(.copyChannelLink, "Copy channel link", [], .palette, "link"),
         Command(.back, "Back", ["⌘["], .global, "chevron.left"),
         Command(.forward, "Forward", ["⌘]"], .global, "chevron.right"),
+        Command(.toggleSeconds, "Show seconds in timestamps", [], .palette, "clock"),
+        Command(.undoWindow, "Undo window: 5 s / 10 s", [], .palette, "timer"),
         Command(.toggleAppearance, "Toggle dark / light", [], .palette, "circle.lefthalf.filled"),
         Command(.switchWorkspace, "Switch workspace…", [], .palette, "building.2"),
         Command(.openLog, "Open log file", [], .palette, "doc.text"),

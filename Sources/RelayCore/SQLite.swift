@@ -51,27 +51,64 @@ public struct Row {
     public func text(_ i: Int32) -> String { string(i) ?? "" }
 }
 
-/// One connection, one queue. Every call is synchronous on the caller's
-/// thread; callers own the threading (the app reads on main for the first
-/// frame, the sync engine writes from its actor).
+/// One writer connection behind a lock. Every call is synchronous on the
+/// caller's thread; callers own the threading (the app reads on main for
+/// the first frame, the sync engine writes from its tasks). Reads on the
+/// main thread go to a second, read-only connection (`openReader`), so
+/// under WAL they never wait for a background write transaction; inside a
+/// transaction main itself opened, they stay on the writer to see its rows.
 public final class Database {
     private var db: OpaquePointer?
     private var cache: [String: OpaquePointer] = [:]
     private let lock = NSRecursiveLock()
     public let path: String
+    private var reader: Database?
+    /// Main-thread transaction depth; touched only on main.
+    private var mainDepth = 0
 
-    public init(path: String) throws {
+    public init(path: String, readOnly: Bool = false) throws {
         self.path = path
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        let flags = (readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK else {
             let m = db.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
             throw SQLiteError.open("\(path): \(m)")
         }
         sqlite3_busy_timeout(db, 5000)
+        if readOnly {
+            try exec("PRAGMA temp_store=MEMORY")
+            return
+        }
         try exec("PRAGMA journal_mode=WAL")
         try exec("PRAGMA synchronous=NORMAL")
         try exec("PRAGMA foreign_keys=ON")
         try exec("PRAGMA temp_store=MEMORY")
+    }
+
+    /// After migrations: from here on main-thread reads use their own
+    /// connection. Main thread only.
+    public func openReader() throws {
+        guard path != ":memory:", !path.isEmpty, reader == nil else { return }
+        reader = try Database(path: path, readOnly: true)
+    }
+
+    /// The same, with the open (~10 ms) done off main so the first frame
+    /// doesn't pay for it; reads stay on the writer until it lands.
+    public func openReaderInBackground(failed: @escaping (Error) -> Void) {
+        guard path != ":memory:", !path.isEmpty, reader == nil else { return }
+        let path = self.path
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let r = try Database(path: path, readOnly: true)
+                DispatchQueue.main.async { [weak self] in if self?.reader == nil { self?.reader = r } }
+            } catch {
+                DispatchQueue.main.async { failed(error) }
+            }
+        }
+    }
+
+    private var readsElsewhere: Database? {
+        guard let reader, Thread.isMainThread, mainDepth == 0 else { return nil }
+        return reader
     }
 
     deinit {
@@ -137,6 +174,7 @@ public final class Database {
     }
 
     public func query<T>(_ sql: String, _ args: [SQLBindable], map: (Row) throws -> T) throws -> [T] {
+        if let r = readsElsewhere { return try r.query(sql, args, map: map) }
         lock.lock(); defer { lock.unlock() }
         let s = try statement(sql)
         bind(s, args)
@@ -172,6 +210,9 @@ public final class Database {
     /// transaction can run inside a caller's.
     public func transaction<T>(_ body: () throws -> T) throws -> T {
         lock.lock(); defer { lock.unlock() }
+        let main = Thread.isMainThread
+        if main { mainDepth += 1 }
+        defer { if main { mainDepth -= 1 } }
         let sp = "sp\(depth)"
         try exec(depth == 0 ? "BEGIN IMMEDIATE" : "SAVEPOINT \(sp)")
         depth += 1

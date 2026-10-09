@@ -9,6 +9,11 @@ public struct Draft: Equatable {
     public init(channel: String, threadTS: String?, text: String, selection: NSRange, updated: Date = Date()) {
         self.channel = channel; self.threadTS = threadTS; self.text = text; self.selection = selection; self.updated = updated
     }
+
+    /// An undone send comes back after whatever was typed since, never over it.
+    public static func merge(_ existing: String, _ restored: String) -> String {
+        existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? restored : existing + "\n" + restored
+    }
 }
 
 public struct UIKey<T: Codable> {
@@ -102,6 +107,12 @@ extension Store {
             """, d.channel, d.threadTS ?? "", d.text, d.selection.location, d.selection.length, d.updated.timeIntervalSince1970)
     }
 
+    /// O2 for a composer that isn't showing this key: the text joins its saved draft.
+    public func appendDraft(channel: String, thread: String?, text: String) throws {
+        let merged = Draft.merge(try draft(channel, thread: thread)?.text ?? "", text)
+        try saveDraft(Draft(channel: channel, threadTS: thread, text: merged, selection: NSRange(location: (merged as NSString).length, length: 0)))
+    }
+
     public func clearDraft(_ channel: String, thread: String?) throws {
         try db.run("DELETE FROM drafts WHERE channel=? AND thread_ts=?", channel, thread ?? "")
     }
@@ -112,6 +123,20 @@ extension Store {
             Draft(channel: r.text(0), threadTS: r.text(1).isEmpty ? nil : r.text(1), text: r.text(2),
                   selection: NSRange(location: r.int(3), length: r.int(4)), updated: Date(timeIntervalSince1970: r.double(5)))
         }
+    }
+
+    /// Which of these thread roots have a reply past my last view of that
+    /// thread, or past the channel's read cursor for a thread never opened
+    /// (the same rule as `firstUnread(_:thread:)`). One kv read per call.
+    public func unreadThreads(_ channel: String, roots: [(ts: String, latest: String)]) throws -> Set<String> {
+        guard !roots.isEmpty else { return [] }
+        let prefix = "ui:threadRead:\(channel)/"
+        var read: [String: String] = [:]
+        for (k, v) in try db.query("SELECT key, value FROM kv WHERE key >= ? AND key < ?", prefix, "ui:threadRead:\(channel)0", map: { ($0.text(0), $0.text(1)) }) {
+            do { read[String(k.dropFirst(prefix.count))] = try JSONDecoder().decode(String.self, from: Data(v.utf8)) } catch { throw LocalStateError.decode(key: k, error) }
+        }
+        guard let lastRead = try conversation(channel)?.lastRead else { return [] }
+        return Set(roots.filter { ListLayout.tsLess(read[$0.ts] ?? lastRead, $0.latest) }.map(\.ts))
     }
 
     /// Threads in `channel` that hold a draft.

@@ -117,6 +117,18 @@ extension MainController {
         case .toggleAppearance:
             let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             NSApp.appearance = NSAppearance(named: dark ? .aqua : .darkAqua)
+        case .toggleSeconds:
+            let on = !(config.showSeconds ?? false)
+            guard updateConfig({ $0.showSeconds = on }) else { return }
+            TimeLabel.seconds = on
+            list.redrawAll()
+            thread.redrawAll()
+            toast.show(on ? "Timestamps show seconds" : "Timestamps without seconds", kind: .success)
+        case .undoWindow:
+            let next: Double = (config.undoSeconds ?? Config.defaultUndoSeconds) == 10 ? 5 : 10
+            guard updateConfig({ $0.undoSeconds = next }) else { return }
+            outbox?.undoSeconds = next
+            toast.show(String(format: "Undo window: %.0f s", next), kind: .success)
         case .switchWorkspace: showPalette(query: "> workspace")
         case .openLog: openFile(Paths.log)
         case .openConfig: openFile(Paths.config)
@@ -125,6 +137,11 @@ extension MainController {
             NSWorkspace.shared.activateFileViewerSelecting([Paths.database(workspace)])
         case .quit: NSApp.terminate(nil)
         }
+    }
+
+    /// K-3 toggles write config.json atomically; a failure says so and changes nothing.
+    private func updateConfig(_ change: (inout Config) -> Void) -> Bool {
+        do { config = try Config.update(change); return true } catch { report(error, "config"); return false }
     }
 
     private func openFile(_ u: URL) {
@@ -137,6 +154,8 @@ extension MainController {
     func present(_ o: Overlay) {
         overlay?.removeFromSuperview()
         overlay = o
+        list.dismissBar()
+        thread.dismissBar()
         o.onClose = { [weak self] in self?.dismissOverlay() }
         o.show(in: root)
         if let p = o as? Palette { p.focus() } else if let p = o as? PickerOverlay { p.focus() }
@@ -207,9 +226,27 @@ extension MainController {
         menu.popUp(positioning: nil, at: p, in: v)
     }
 
+    func headerMenu(at r: NSRect) {
+        guard let c = current else { return }
+        let details = MenuAction("Channel details") { [weak self] in self?.showPalette(query: "> channel details") }
+        let link = MenuAction("Copy link") { [weak self] in self?.run(.copyChannelLink) }
+        let slack = MenuAction("Open in Slack") { [weak self] in self?.run(.openInSlack) }
+        let star = MenuAction(starred.contains(c.id) ? "Unstar \(c.label)" : "Star \(c.label)") { [weak self] in self?.run(.star) }
+        let menu = NSMenu()
+        for a in [details, link, slack, star] { menu.addItem(a.item) }
+        menuActions = [details, link, slack, star]
+        menu.popUp(positioning: nil, at: NSPoint(x: r.minX, y: r.maxY), in: header)
+    }
+
     func renameSection(_ id: String, _ name: String) {
         guard let i = sections.firstIndex(where: { $0.id == id }) else { return }
         sections[i].name = name
+        setUI(.sections, sections)
+        reloadSidebar()
+    }
+
+    func moveSection(_ id: String, by d: Int) {
+        sections = Sections.reorder(sections, id, by: d)
         setUI(.sections, sections)
         reloadSidebar()
     }
@@ -228,7 +265,7 @@ extension MainController {
         let items = drafts.map { d -> Palette.Item in
             let label = convs[d.channel]?.label ?? d.channel
             return Palette.Item(icon: .symbol("pencil"), title: d.threadTS == nil ? label : "Thread in \(label)",
-                                detail: Mrkdwn.plain(d.text, names: store.name(of:)).replacingOccurrences(of: "\n", with: " "),
+                                detail: Mrkdwn.plain(d.text, names: store.name(of:), channels: { convs[$0]?.name }).replacingOccurrences(of: "\n", with: " "),
                                 run: { [weak self] in self?.openDraft(d) })
         }
         var s = Palette.Section(title: "Drafts", prefix: nil, items: items, emptyQuery: items, cap: 50)
@@ -328,6 +365,8 @@ extension MainController {
         var cmds: [Palette.Item] = Commands.all.filter { $0.scope != .message && ![.palette, .moveToSection, .switchWorkspace, .renameSection, .deleteSection, .collapseSection].contains($0.id) }.map { c in
             var title = c.title
             if c.id == .star, let cur = current { title = starred.contains(cur.id) ? "Unstar \(cur.label)" : "Star \(cur.label)" }
+            if c.id == .toggleSeconds, TimeLabel.seconds { title += "  ✓" }
+            if c.id == .undoWindow { title = String(format: "Undo window: 5 s / 10 s (now %.0f s)", outbox?.undoSeconds ?? config.undoSeconds ?? Config.defaultUndoSeconds) }
             return Palette.Item(icon: .symbol(c.symbol), title: title, keys: c.keys.prefix(1).map { $0 }, run: { [weak self] in self?.run(c.id) }, match: title + " " + c.keys.joined(separator: " "))
         }
         if let c = current {
@@ -347,6 +386,8 @@ extension MainController {
                 DispatchQueue.main.async { self?.askText("Rename \(s.name)", initial: s.name) { self?.renameSection(s.id, $0) } }
             }))
             cmds.append(Palette.Item(icon: .symbol("folder.badge.minus"), title: "Delete section \(s.name)", run: { [weak self] in self?.deleteSection(s.id) }))
+            cmds.append(Palette.Item(icon: .symbol("arrow.up"), title: "Move section \(s.name) up", run: { [weak self] in self?.moveSection(s.id, by: -1) }))
+            cmds.append(Palette.Item(icon: .symbol("arrow.down"), title: "Move section \(s.name) down", run: { [weak self] in self?.moveSection(s.id, by: 1) }))
         }
         for name in config.workspaces.keys.sorted() where name != workspace {
             cmds.append(Palette.Item(icon: .symbol("building.2"), title: "Switch to workspace \(name)", run: { [weak self] in self?.onSwitchWorkspace?(name) }))
@@ -386,7 +427,10 @@ extension MainController {
             DispatchQueue.global(qos: .userInitiated).async {
                 let hits: [Hit]
                 do { hits = try db.search(q, limit: 5) } catch {
-                    DispatchQueue.main.async { log("palette search: \(error)") }
+                    DispatchQueue.main.async { [weak self] in
+                        self?.report(error, "palette search")
+                        done([Palette.Item(icon: .symbol("exclamationmark.triangle"), title: "Search failed: \(error)", run: {})])
+                    }
                     return
                 }
                 DispatchQueue.main.async { [weak self] in

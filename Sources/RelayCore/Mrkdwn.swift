@@ -331,7 +331,7 @@ public enum Mrkdwn {
     }
 
     /// Text for search: markers dropped, mentions as @name, links as their label.
-    public static func plain(_ s: String, names: (String) -> String) -> String {
+    public static func plain(_ s: String, names: (String) -> String, channels: (String) -> String? = { _ in nil }) -> String {
         func inl(_ xs: [Inline]) -> String {
             xs.map { x -> String in
                 switch x {
@@ -340,7 +340,7 @@ public enum Mrkdwn {
                 case .emoji(let n): return ":\(n):"
                 case .link(let l, let u): return l ?? u.replacingOccurrences(of: "mailto:", with: "")
                 case .mention(.user(let id, let l)): return "@" + (l ?? names(id))
-                case .mention(.channel(let id, let l)): return "#" + (l ?? id)
+                case .mention(.channel(let id, let l)): return "#" + (l ?? channels(id) ?? id)
                 case .mention(.group(_, let l)): return l ?? "@group"
                 case .mention(.special(let n)): return "@" + n
                 }

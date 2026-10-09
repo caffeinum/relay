@@ -27,7 +27,8 @@ public enum ListLayout {
             var broken = false
             let day = calendar.startOfDay(for: date)
             if day != lastDay {
-                out.append(.day(day))
+                // The thread pane's header already frames the parent: its day shows only where replies change day.
+                if !(inThread && i == 0) { out.append(.day(day)) }
                 lastDay = day
                 broken = true
             }
@@ -97,13 +98,16 @@ public enum TimeLabel {
         f.dateFormat = format
         return f
     }
-    private static let time = formatter("h:mm a")
-    private static let gutterTime = formatter("h:mm")
+    /// K-3 "show seconds": set on main from config, read while drawing.
+    public static var seconds = false
+    private static let timeM = formatter("h:mm a"), timeS = formatter("h:mm:ss a")
+    private static let gutterM = formatter("h:mm"), gutterS = formatter("h:mm:ss")
     private static let month = formatter("MMM")
     private static let full = formatter("EEEE, MMMM d, yyyy 'at' h:mm:ss a")
 
     /// "4:52 PM", "Yesterday at 4:52 PM", "Oct 3rd at 4:52 PM".
-    public static func short(_ d: Date, now: Date = Date()) -> String {
+    public static func short(_ d: Date, now: Date = Date(), seconds: Bool = seconds) -> String {
+        let time = seconds ? timeS : timeM
         let cal = Calendar.current
         if cal.isDate(d, inSameDayAs: now) { return time.string(from: d) }
         if let y = cal.date(byAdding: .day, value: -1, to: now), cal.isDate(d, inSameDayAs: y) { return "Yesterday at " + time.string(from: d) }
@@ -111,7 +115,7 @@ public enum TimeLabel {
     }
 
     /// The avatar-gutter time on grouped rows: "4:52".
-    public static func gutter(_ d: Date) -> String { gutterTime.string(from: d) }
+    public static func gutter(_ d: Date, seconds: Bool = seconds) -> String { (seconds ? gutterS : gutterM).string(from: d) }
 
     public static func tooltip(_ d: Date) -> String { full.string(from: d) }
 }

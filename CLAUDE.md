@@ -5,7 +5,7 @@ The approved plan is in README.md.
 
 - The sibling app is ~/Github/caffeinum/mail (Reply). Reuse its patterns: Store (sqlite WAL + fts5), Outbox with undo, the keychain via /usr/bin/security, POST_SCRIPT-style UI scripting, and build.sh / test.sh.
 - The workspace is 2027dev.slack.com, through one internal Slack app with user-token scopes and Socket Mode. Do not use the browser session token (xoxc). The operator ruled it out.
-- Writes against 2027dev are approved (operator, 2026-10-08 20:31 PDT: "implement write version from the start"). The starter config has writes:true for it. When testing writes on the real workspace, use your own DM (self-DM) or a throwaway message you delete right after; never post into others' channels or DMs as a test. Develop against caffeinum/emulate's Slack emulator. Ask @emulate for missing methods (search.messages, users.conversations and unread counts landed in 46b9fd2; Socket Mode is pending, beads-jgdc).
+- Writes against 2027dev are approved (operator, 2026-10-08 20:31 PDT: "implement write version from the start"). The starter config (`relayctl init`) leaves 2027dev writes off, so a fresh install can't post by accident; the operator's own config decides. When testing writes on the real workspace, use your own DM (self-DM) or a throwaway message you delete right after; never post into others' channels or DMs as a test. Develop against caffeinum/emulate's Slack emulator. Ask @emulate for missing methods (search.messages, users.conversations and unread counts landed in 46b9fd2; Socket Mode is pending, beads-jgdc).
 - Never print tokens.
 
 ## Layout
@@ -22,7 +22,7 @@ The approved plan is in README.md.
 
 ## Shell (sidebar, composer, ⌘K, wiring)
 - Keys: `RelayCore/Shell/Commands.swift` is the one keymap. `CommandID` is exhaustive and `MainController.run(_:)` switches over it, so a new command won't compile until it has a handler; ⌘K's Commands section and the router both read `Commands.all`. Key names are `⌃⌥⌘⇧` + key ("⌘⇧D", "⌥⇧↓", "g u"). A bare key never fires while a text field has focus, whatever its scope.
-- Sidebar order comes from `Sections.place` (Starred, local sections, Channels, DMs; first match wins; collapsed groups keep unread, selected and draft rows). Sections live in kv `ui:sections`, seeded once from config `sections`; built-in group collapse is `ui:collapsedGroups`. All local state is `store.ui/setUI` (UIKey), never UserDefaults.
+- Sidebar order comes from `Sections.place` (local sections, Starred, Channels, DMs, per spec C1; first match wins; collapsed groups keep unread, selected and draft rows). Sections live in kv `ui:sections`, seeded once from config `sections` (`emoji` → icon, `collapsed`; icons backfill by name onto older kv); built-in group collapse is `ui:collapsedGroups`. All local state is `store.ui/setUI` (UIKey), never UserDefaults.
 - Composer: `ComposerTextView` keeps mentions as `.relayMention` attributes (atomic on backspace, dropped if edited inside) and `mrkdwn` = `Mentions.encode`. The inline editor uses the same class through `makeEditorTextView`, so edits keep `<@U>` ids. Drafts save 300 ms after typing and on every switch/quit (`saveState`). The composer's text view is built after the first frame (`Composer.install()`): TextKit's first load is ~12 ms.
 - Never call `NotificationCenter.removeObserver(self)` on a view that is an NSTextView delegate: it also removes the text view's delegate observations (textDidChange stops). That broke draft autosave once.
 - Headless: `openURL`, open log/config and reveal-in-Finder only log and toast, so nothing pops up on the operator's screen.
@@ -30,3 +30,14 @@ The approved plan is in README.md.
 - More script verbs: `open #name`, `thread <i>`, `select <i>`, `focus [thread|list]`, `run <commandID>`, `palette <query>`, `state <label>` (one greppable line: current, thread, both composers' mrkdwn, last toast, last 3 messages, palette rows). `type` sends real key events per character, so it goes through the router and the text view like typing does.
 - Verify on :4003 with `RELAY_HOME=/tmp/relay-shell RELAY_CONFIG=/tmp/relay-shell/config.json` (emulator workspace, writes:true) and `relayctl history`/`drafts`/`outbox` to check what reached the emulator. Bench note: on a loaded machine (load ~20) medians swing ±40 ms; compare phase marks (`RELAY_BENCH=1`, n=10 medians) against a build of the previous commit, not against old numbers.
 - While `~/.config/relay/headless` exists, every run is headless no matter who starts it (bench too: it then reports only the app-side number). The operator is at the machine until 2am; remove the file only when on-screen testing is allowed.
+
+## Fix round (review findings)
+- `relayctl bench` runs the app with `RELAY_OFFLINE=1`, and bench mode never calls `main.start()`: it measures the first frame only and can't reach slack.com.
+- `MessageListContext` is plain data (me, channel names, group handles, custom emoji, people generation); assigning an equal one is free. Thread draft/unread marks are `MessageList.draftThreads`/`unreadThreads` and only redraw those summaries. `MainController.refreshContext()` runs when the conversation list or directory changes (`changed([])`) or `Store.peopleGeneration` moves.
+- `cacheChanged` coalesces: channels collect and flush once per run-loop turn. The redraw keeps the loaded window (`store.messages(id, since: oldest)`), and a list that had nothing opens with `.open(unreadAfter:)`.
+- Scrollback pages from the cache first (`messages(_:before:limit:)`), the network only once the cache runs out.
+- `Database` opens a read-only second connection after migrations; main-thread reads use it unless main itself is inside a transaction.
+- Live: after a reconnect it re-fetches the watched channel/thread (and runs `sync.all` after a gap > 60 s); a 30 s ping catches half-open sockets; transport errors are logged as domain/code/message only (the wss URL carries a ticket).
+- ⌘K toggles `toggleSeconds` / `undoWindow` write config.json via `Config.update` (re-read, change, atomic write). Compact mode isn't built yet.
+- Script: `key <name>` with an unknown name prints and does nothing; `focuswin` makes read-on-view (U3) fire in headless runs.
+- Emulator gaps: `conversations.history` ignores `latest` (scrollback over the network re-fetches the newest page) and omits `latest_reply` (the store falls back to the newest cached reply).

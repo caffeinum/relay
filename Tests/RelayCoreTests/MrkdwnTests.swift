@@ -9,6 +9,7 @@ private func p(_ xs: I...) -> Mrkdwn.Block { .paragraph(xs) }
     let names = ["U1": "mira"]
     let s = "hi <@U1>, see <https://x.com/a?b=1&amp;c=2|the doc> in <#C9|eng> &lt;3 <!here>"
     #expect(Mrkdwn.plain(s, names: { names[$0] ?? $0 }) == "hi @mira, see the doc in #eng <3 @here")
+    #expect(Mrkdwn.plain("see <#C2>", names: { $0 }, channels: { $0 == "C2" ? "random" : nil }) == "see #random")
     #expect(Mrkdwn.parse("<https://a.b>") == [p(.link(label: nil, url: "https://a.b"))])
 }
 

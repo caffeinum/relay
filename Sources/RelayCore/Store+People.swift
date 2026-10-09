@@ -29,39 +29,41 @@ public struct UserGroup: Equatable {
 
 /// In-memory copies of the small tables every frame reads. Loaded on first
 /// use, dropped when the table is written. Loads run outside `lock`
-/// because callers may already hold the database lock.
+/// because callers may already hold the database lock; a load that raced
+/// an invalidation is returned but not kept, so it can't hide the write.
 final class Directory {
     private let lock = NSLock()
     private var people: [String: Person]?
     private var bots: [String: Bot]?
     private var groups: Set<String>?
+    /// Bumped by every invalidation.
+    private(set) var generation = 0
 
     func withLock<T>(_ body: () -> T) -> T { lock.lock(); defer { lock.unlock() }; return body() }
 
-    func people(load: () throws -> [Person]) rethrows -> [String: Person] {
-        if let p = withLock({ people }) { return p }
-        let loaded = Dictionary(try load().map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        withLock { people = loaded }
+    private func cached<T>(_ get: () -> T?, _ set: (T) -> Void, load: () throws -> T) rethrows -> T {
+        let (hit, gen) = withLock { (get(), generation) }
+        if let hit { return hit }
+        let loaded = try load()
+        withLock { if generation == gen { set(loaded) } }
         return loaded
+    }
+
+    func people(load: () throws -> [Person]) rethrows -> [String: Person] {
+        try cached({ people }, { people = $0 }) { Dictionary(try load().map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
     }
 
     func bots(load: () throws -> [Bot]) rethrows -> [String: Bot] {
-        if let b = withLock({ bots }) { return b }
-        let loaded = Dictionary(try load().map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        withLock { bots = loaded }
-        return loaded
+        try cached({ bots }, { bots = $0 }) { Dictionary(try load().map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
     }
 
     func groups(load: () throws -> Set<String>) rethrows -> Set<String> {
-        if let g = withLock({ groups }) { return g }
-        let loaded = try load()
-        withLock { groups = loaded }
-        return loaded
+        try cached({ groups }, { groups = $0 }, load: load)
     }
 
-    func invalidatePeople() { withLock { people = nil; groups = nil } }
-    func invalidateBots() { withLock { bots = nil } }
-    func invalidateGroups() { withLock { groups = nil } }
+    func invalidatePeople() { withLock { people = nil; groups = nil; generation += 1 } }
+    func invalidateBots() { withLock { bots = nil; generation += 1 } }
+    func invalidateGroups() { withLock { groups = nil; generation += 1 } }
 }
 
 extension Store {
@@ -118,6 +120,10 @@ extension Store {
 
     /// Memory only after the first load: a miss does no I/O.
     public func person(_ id: String) -> Person? { peopleMap()[id] }
+
+    /// Changes whenever people, bots or groups are written: names drawn
+    /// before that may be stale.
+    public var peopleGeneration: Int { directory.withLock { directory.generation } }
 
     /// The person's label, else a bot's name, else the raw id (A3).
     public func name(of user: String) -> String {

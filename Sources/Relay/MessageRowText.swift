@@ -31,15 +31,27 @@ struct Body {
 
     static let lineHeight: CGFloat = 20
 
-    private static func para(_ indent: CGFloat = 0, tab: CGFloat? = nil, before: CGFloat = 0, after: CGFloat = 0, tail: CGFloat = 0, line: CGFloat = lineHeight) -> NSParagraphStyle {
+    private static func para(_ indent: CGFloat = 0, before: CGFloat = 0, after: CGFloat = 0, tail: CGFloat = 0, line: CGFloat = lineHeight) -> NSParagraphStyle {
         let p = NSMutableParagraphStyle()
         p.minimumLineHeight = line
         p.headIndent = indent
-        p.firstLineHeadIndent = tab.map { indent - $0 } ?? indent
-        if let tab { p.tabStops = [NSTextTab(textAlignment: .left, location: indent)]; p.defaultTabInterval = tab }
+        p.firstLineHeadIndent = indent
         p.tailIndent = tail
         p.paragraphSpacingBefore = before
         p.paragraphSpacing = after
+        p.lineBreakMode = .byWordWrapping
+        return p
+    }
+
+    /// Bullets and numbers share one text column at 22; the marker is
+    /// right-aligned at 16, so "10." fits and "•" lines up with "1.".
+    static func listPara(_ quoted: CGFloat) -> NSParagraphStyle {
+        let p = NSMutableParagraphStyle()
+        p.minimumLineHeight = lineHeight
+        p.firstLineHeadIndent = quoted
+        p.headIndent = quoted + 22
+        p.tabStops = [NSTextTab(textAlignment: .right, location: quoted + 16), NSTextTab(textAlignment: .left, location: quoted + 22)]
+        p.paragraphSpacing = 2
         p.lineBreakMode = .byWordWrapping
         return p
     }
@@ -149,10 +161,10 @@ struct Body {
                         var a = attrs(s, p)
                         a[.foregroundColor] = Theme.link
                         a[.relayLink] = url
-                        // The icon is drawn by BodyLayoutManager into the kern of a leading hair space,
+                        // The icon is drawn by BodyLayoutManager into the kern of a leading no-break space,
                         // so the line stays measurable without an attachment.
                         let start = out.length
-                        chip("\u{200A}" + short(raw), a, .link)
+                        chip("\u{202F}" + unbreakable(short(raw)), a, .link)
                         out.addAttribute(.kern, value: 17, range: NSRange(location: start, length: 1))
                     }
                 }
@@ -179,12 +191,11 @@ struct Body {
                     out.append(NSAttributedString(string: body, attributes: [.font: Theme.Font.mono, .foregroundColor: textColor, .paragraphStyle: pCode,
                                                                                 .relayBlock: BlockDeco.code.rawValue]))
                 case .list(let ordered, let items):
-                    let indent = quoted + (ordered ? 24 : 18)
-                    let p = para(indent, tab: ordered ? 24 : 18, before: 0, after: 2)
+                    let p = listPara(quoted)
                     for (i, item) in items.enumerated() {
                         newline(p)
                         let start = out.length
-                        out.append(NSAttributedString(string: (ordered ? "\(i + 1)." : "•") + "\t", attributes: attrs(Style(), p)))
+                        out.append(NSAttributedString(string: "\t" + (ordered ? "\(i + 1)." : "•") + "\t", attributes: attrs(Style(), p)))
                         inline(item, Style(), p)
                         if quoted > 0 { out.addAttribute(.relayBlock, value: BlockDeco.quote.rawValue, range: NSRange(location: start, length: out.length - start)) }
                     }
@@ -213,6 +224,17 @@ struct Body {
             }
         }
         return (1...3).contains(n)
+    }
+
+    /// A word joiner after each separator, so a link chip moves to the next
+    /// line whole instead of breaking at "/" and leaving its capsule behind.
+    static func unbreakable(_ s: String) -> String {
+        var out = ""
+        for c in s {
+            out.append(c)
+            if "/.-?&=_#:".contains(c) { out.append("\u{2060}") }
+        }
+        return out
     }
 
     /// "docs.revyl.com/infrastructure": no scheme, at most 48 characters with a middle "…".

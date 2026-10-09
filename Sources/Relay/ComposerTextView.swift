@@ -33,6 +33,9 @@ final class ComposerTextView: NSTextView, NSTextStorageDelegate {
     var onCommandReturn: (() -> Void)?
     var onUndoEmpty: (() -> Bool)?
     weak var popupHost: NSView?
+    /// The popup's bottom sits 6 above this view's top (D§7.1): the composer box.
+    weak var popupAnchor: NSView?
+    private var suppressTrigger = false
     private let popup = CompletionPopup()
     private var trigger: (range: NSRange, sigil: Character)?
 
@@ -96,7 +99,9 @@ final class ComposerTextView: NSTextView, NSTextStorageDelegate {
         typingAttributes = Self.base
         undoManager?.removeAllActions()
         closePopup()
+        suppressTrigger = true
         didChangeText()
+        suppressTrigger = false
     }
 
     /// The atom goes whole: backspace right after a token deletes all of it.
@@ -226,7 +231,7 @@ final class ComposerTextView: NSTextView, NSTextStorageDelegate {
     }
 
     private func updateTrigger() {
-        guard complete != nil, window != nil else { closePopup(); return }
+        guard !suppressTrigger, complete != nil, window?.firstResponder === self else { closePopup(); return }
         let sel = selectedRange()
         guard sel.length == 0 else { closePopup(); return }
         let ns = string as NSString
@@ -249,17 +254,27 @@ final class ComposerTextView: NSTextView, NSTextStorageDelegate {
         showPopup(rows, at: i)
     }
 
-    private func showPopup(_ rows: [Suggestion], at i: Int) {
+    private var shownAt = 0
+
+    /// After the box grows or moves, the open popup follows it.
+    func repositionPopup() {
+        guard popupOpen else { return }
+        showPopup(popup.rows, at: shownAt, keepIndex: true)
+    }
+
+    private func showPopup(_ rows: [Suggestion], at i: Int, keepIndex: Bool = false) {
         guard let host = popupHost ?? window?.contentView, let lm = layoutManager, let tc = textContainer else { return }
+        shownAt = i
         let g = lm.glyphIndexForCharacter(at: min(i, max(0, (string as NSString).length - 1)))
         var r = lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tc)
         if (string as NSString).length == 0 { r = .zero }
         let inView = r.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
         let p = host.convert(inView, from: self)
-        popup.rows = rows
+        if !keepIndex { popup.rows = rows }
         if popup.superview !== host { host.addSubview(popup) }
         let h = popup.preferredHeight
-        let top = host.isFlipped ? p.minY - 6 - h : p.maxY + 6
+        let anchor = popupAnchor.map { host.convert($0.bounds, from: $0) } ?? p
+        let top = host.isFlipped ? anchor.minY - 6 - h : anchor.maxY + 6
         let x = max(8, min(p.minX - 10, host.bounds.width - CompletionPopup.width - 8))
         popup.frame = NSRect(x: x, y: max(4, top), width: CompletionPopup.width, height: h)
         popup.needsDisplay = true

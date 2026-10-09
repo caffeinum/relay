@@ -75,6 +75,8 @@ final class ChannelHeader: NSView {
     var onSearch: (() -> Void)?
     var onClose: (() -> Void)?
     var onSubtitle: (() -> Void)?
+    /// The ⋮ menu: details, copy link, open in Slack (D§4).
+    var onMore: ((NSRect) -> Void)?
     static let height: CGFloat = 49
     override var isFlipped: Bool { true }
     private var nameRect = NSRect.zero, subtitleRect = NSRect.zero
@@ -90,6 +92,8 @@ final class ChannelHeader: NSView {
 
     private var starRect: NSRect { NSRect(x: 14, y: 11, width: 26, height: 26) }
     private var rightRect: NSRect { NSRect(x: bounds.width - 44, y: 10, width: 28, height: 28) }
+    /// Channel headers: search sits 8 left of the ⋮ at the edge.
+    private var searchRect: NSRect { closable ? rightRect : rightRect.offsetBy(dx: -36, dy: 0) }
 
     override func draw(_ dirtyRect: NSRect) {
         Theme.bg.setFill()
@@ -134,15 +138,15 @@ final class ChannelHeader: NSView {
             }
             let a = NSAttributedString(string: c.name, attributes: [.font: Theme.Font.title, .foregroundColor: Theme.textStrong])
             let s = a.size()
-            let maxName = max(40, rightRect.minX - x - 40)
+            let maxName = max(40, searchRect.minX - x - 40)
             nameRect = NSRect(x: x, y: mid - s.height / 2, width: min(s.width, maxName), height: s.height)
             a.draw(with: nameRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
             Glyphs.chevronDown(in: NSRect(x: nameRect.maxX + 5, y: mid - 5, width: 10, height: 10), Theme.textMuted)
             x = nameRect.maxX + 24
-            if let topic = c.topic, !topic.isEmpty, x < rightRect.minX - 20 {
+            if let topic = c.topic, !topic.isEmpty, x < searchRect.minX - 20 {
                 let t = NSAttributedString(string: topic, attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.textMuted])
                 let ts = t.size()
-                t.draw(with: NSRect(x: x, y: mid - ts.height / 2 + 1, width: rightRect.minX - x - 8, height: ts.height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+                t.draw(with: NSRect(x: x, y: mid - ts.height / 2 + 1, width: searchRect.minX - x - 8, height: ts.height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
             }
         }
         if closable {
@@ -153,7 +157,11 @@ final class ChannelHeader: NSView {
             p.lineWidth = 1.5; p.lineCapStyle = .round
             Theme.textMuted.setStroke(); p.stroke()
         } else {
-            Glyphs.magnifier(in: rightRect.insetBy(dx: 7, dy: 7), Theme.textMuted)
+            Glyphs.magnifier(in: searchRect.insetBy(dx: 7, dy: 7), Theme.textMuted)
+            Theme.textMuted.setFill()
+            for i in -1...1 {
+                NSBezierPath(ovalIn: NSRect(x: rightRect.midX - 1.6, y: rightRect.midY + CGFloat(i) * 5 - 1.6, width: 3.2, height: 3.2)).fill()
+            }
         }
     }
 
@@ -173,7 +181,9 @@ final class ChannelHeader: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if rightRect.contains(p) { closable ? onClose?() : onSearch?(); return }
+        if closable, rightRect.contains(p) { onClose?(); return }
+        if !closable, searchRect.contains(p) { onSearch?(); return }
+        if !closable, rightRect.contains(p) { onMore?(rightRect); return }
         if title == nil, starRect.contains(p) { onStar?(); return }
         if title == nil, nameRect.insetBy(dx: -4, dy: -6).contains(p) { onName?(); return }
         if title != nil, subtitleRect.contains(p) { onSubtitle?() }

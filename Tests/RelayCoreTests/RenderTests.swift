@@ -41,8 +41,11 @@ private func grouped(_ items: [ListItem]) -> [Bool] {
 @Test func threadPaneHasReplyDividerUnderParent() {
     let ms = [msg(day0, "U1", replies: 2), msg(day0 + 10, "U1"), msg(day0 + 20, "U1")]
     let items = ListLayout.items(ms, unreadAfter: nil, inThread: true, calendar: cal)
-    #expect(items == [.day(cal.startOfDay(for: ms[0].date)), .message(index: 0, grouped: false), .threadReplies(count: 2),
+    #expect(items == [.message(index: 0, grouped: false), .threadReplies(count: 2),
                       .message(index: 1, grouped: false), .message(index: 2, grouped: true)])
+    let nextDay = [msg(day0, "U1", replies: 1), msg(day0 + 86_400, "U1")]
+    #expect(ListLayout.items(nextDay, unreadAfter: nil, inThread: true, calendar: cal)
+        == [.message(index: 0, grouped: false), .threadReplies(count: 1), .day(cal.startOfDay(for: nextDay[1].date)), .message(index: 1, grouped: false)])
 }
 
 @Test func tsComparesNumerically() {
@@ -68,6 +71,8 @@ private func grouped(_ items: [ListItem]) -> [Bool] {
     #expect(TimeLabel.short(t.addingTimeInterval(-86400), now: now) == "Yesterday at 4:52 PM")
     #expect(TimeLabel.short(c.date(from: DateComponents(year: 2026, month: 10, day: 3, hour: 9, minute: 5))!, now: now) == "Oct 3rd at 9:05 AM")
     #expect(TimeLabel.gutter(t) == "4:52")
+    #expect(TimeLabel.short(t.addingTimeInterval(7), now: now, seconds: true) == "4:52:07 PM")
+    #expect(TimeLabel.gutter(t.addingTimeInterval(7), seconds: true) == "4:52:07")
 }
 
 @Test func emojiSearchRanksPrefixThenFrequency() {

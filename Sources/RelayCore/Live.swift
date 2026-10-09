@@ -1,5 +1,8 @@
 import Foundation
 
+/// A transport error with the URL (and its ticket) taken out.
+public struct LiveFailure: Error, CustomStringConvertible { public let description: String }
+
 public enum LiveError: Error, CustomStringConvertible {
     case malformed(String)
     public var description: String {
@@ -149,6 +152,11 @@ public final class Live {
     private var poller: DispatchSourceTimer?
     private var watched: (channel: String?, thread: String?) = (nil, nil)
     private var visible = true
+    private var connectedOnce = false
+    /// When the socket last went away: a long gap re-syncs every conversation.
+    private var droppedAt: Date?
+    private var pinger: DispatchSourceTimer?
+    public var pingInterval: TimeInterval = 30
 
     /// nil app token → polling("no app token").
     public init(store: Store, sync: Sync, appToken: String?) {
@@ -170,6 +178,8 @@ public final class Live {
             running = false
             socket?.cancel(with: .normalClosure, reason: nil)
             socket = nil
+            pinger?.cancel()
+            pinger = nil
             poller?.cancel()
             poller = nil
             status(.stopped)
@@ -200,6 +210,7 @@ public final class Live {
                     socket = t
                     t.resume()
                     receive(t)
+                    startPinging(t)
                 }
             } catch {
                 queue.async { [self] in retry(after: error) }
@@ -238,8 +249,12 @@ public final class Live {
         case "hello":
             backoff = 1
             status(.live)
+            if connectedOnce { catchUp(gap: droppedAt.map { Date().timeIntervalSince($0) } ?? 0) }
+            connectedOnce = true
+            droppedAt = nil
         case "disconnect":
             log("socket mode: disconnect (\(o["reason"] as? String ?? "no reason")), reconnecting")
+            if droppedAt == nil { droppedAt = Date() }
             socket = nil
             t.cancel(with: .goingAway, reason: nil)
             connect()
@@ -265,13 +280,65 @@ public final class Live {
         }
     }
 
+    /// Events sent while the socket was down never arrive: after a
+    /// reconnect, fetch what's on screen and the conversation list.
+    private func catchUp(gap: TimeInterval) {
+        let (channel, thread) = watched
+        log(String(format: "socket mode: reconnected after %.0fs, catching up", gap))
+        Task {
+            do {
+                if let channel {
+                    try await sync.newer(channel)
+                    if let thread { try store.put(messages: try await sync.slack.replies(channel, ts: thread), channel: channel) }
+                    changed([channel])
+                }
+                if gap > 60 { try await sync.all(first: channel) }
+            } catch { fail(error) }
+        }
+    }
+
+    /// A socket left half-open by sleep reads as live and delivers nothing;
+    /// a ping that fails sends it through the usual retry.
+    private func startPinging(_ t: URLSessionWebSocketTask) {
+        pinger?.cancel()
+        let p = DispatchSource.makeTimerSource(queue: queue)
+        p.schedule(deadline: .now() + pingInterval, repeating: pingInterval)
+        p.setEventHandler { [weak self, weak t] in
+            guard let self, let t, t === self.socket else { return }
+            t.sendPing { [weak self] err in
+                guard let self, let err else { return }
+                self.queue.async {
+                    guard t === self.socket else { return }
+                    self.socket = nil
+                    t.cancel(with: .goingAway, reason: nil)
+                    self.retry(after: err)
+                }
+            }
+        }
+        pinger = p
+        p.resume()
+    }
+
     private func retry(after error: Error) {
         guard running else { return }
+        if droppedAt == nil { droppedAt = Date() }
+        pinger?.cancel()
+        pinger = nil
         let after = backoff
         backoff = min(backoff * 2, Self.maxBackoff)
-        log("socket mode: \(error); reconnecting in \(Int(after))s")
-        status(.reconnecting(after: after, error: "\(error)"))
+        let why = Self.describe(error)
+        log("socket mode: \(why); reconnecting in \(Int(after))s")
+        status(.reconnecting(after: after, error: why))
         queue.asyncAfter(deadline: .now() + after) { [self] in connect() }
+    }
+
+    /// NSError's description carries the failing URL, and Socket Mode's
+    /// wss URL holds a connection ticket: only domain, code and message
+    /// reach the log and the status line.
+    static func describe(_ error: Error) -> String {
+        guard !(error is LiveError), !(error is SlackError) else { return "\(error)" }
+        let e = error as NSError
+        return "\(e.domain) \(e.code): \(e.localizedDescription)"
     }
 
     // MARK: polling
@@ -311,8 +378,9 @@ public final class Live {
     }
 
     private func fail(_ e: Error) {
-        log("live: \(e)")
+        let shown: Error = e is LiveError || e is SlackError ? e : LiveFailure(description: Self.describe(e))
+        log("live: \(shown)")
         guard let onError else { return }
-        DispatchQueue.main.async { onError(e) }
+        DispatchQueue.main.async { onError(shown) }
     }
 }

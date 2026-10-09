@@ -304,7 +304,7 @@ final class PaletteCell: NSView {
             var right = bounds.width - 10
             for k in it.keys.reversed() {
                 for cap in k.split(separator: " ").reversed() {
-                    let a = NSAttributedString(string: String(cap), attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: Theme.textMuted])
+                    let a = NSAttributedString(string: cap == "esc" ? "⎋" : String(cap), attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: Theme.textMuted])
                     let s = a.size()
                     let r = NSRect(x: right - s.width - 10, y: (bounds.height - 18) / 2, width: s.width + 10, height: 18)
                     Theme.codeBg.setFill()
@@ -318,7 +318,7 @@ final class PaletteCell: NSView {
                 let a = NSAttributedString(string: "\(it.badge)", attributes: [.font: Theme.Font.badge, .foregroundColor: NSColor.white])
                 let s = a.size()
                 let r = NSRect(x: right - max(18, s.width + 12), y: (bounds.height - 18) / 2, width: max(18, s.width + 12), height: 18)
-                Theme.unreadRed.setFill()
+                Theme.sbBadge.setFill()
                 NSBezierPath(roundedRect: r, xRadius: 9, yRadius: 9).fill()
                 a.draw(at: NSPoint(x: r.midX - s.width / 2, y: r.midY - s.height / 2))
                 right = r.minX - 6

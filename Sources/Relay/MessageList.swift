@@ -1,16 +1,26 @@
 import AppKit
 import RelayCore
 
+/// What bodies are built from. Plain data apart from the two store
+/// lookups, so a rebuilt context that changed nothing costs nothing.
 struct MessageListContext {
     var me: String?
     var person: (String) -> Person? = { _ in nil }
     var name: (String) -> String = { $0 }
-    var channelName: (String) -> String? = { _ in nil }
-    var groupHandle: (String) -> String? = { _ in nil }
+    var channelNames: [String: String] = [:]
+    var groupHandles: [String: String] = [:]
     var customEmoji: [String: String] = [:]
-    var draftThreads: Set<String> = []
-    var threadUnread: (String) -> Bool = { _ in false }
     var writes = false
+    /// Store.peopleGeneration when built: names resolved through `person` go stale when it moves.
+    var peopleGeneration = 0
+
+    func channelName(_ id: String) -> String? { channelNames[id] }
+    func groupHandle(_ id: String) -> String? { groupHandles[id] }
+
+    func sameData(as o: MessageListContext) -> Bool {
+        me == o.me && channelNames == o.channelNames && groupHandles == o.groupHandles && customEmoji == o.customEmoji
+            && writes == o.writes && peopleGeneration == o.peopleGeneration
+    }
 }
 
 enum ShowMode: Equatable {
@@ -87,7 +97,10 @@ final class MessageTable: NSTableView {
 /// shared hover bar, sticky day and jump pills, and edit in place. Used for
 /// the channel and for the thread pane.
 final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    var context = MessageListContext() { didSet { contextChanged() } }
+    var context = MessageListContext() { didSet { if !context.sameData(as: oldValue) { contextChanged() } } }
+    /// Thread roots with a draft, and with unread replies: only those summaries redraw.
+    var draftThreads: Set<String> = [] { didSet { redrawSummaries(oldValue.symmetricDifference(draftThreads)) } }
+    var unreadThreads: Set<String> = [] { didSet { redrawSummaries(oldValue.symmetricDifference(unreadThreads)) } }
     var actions = MessageActions()
     var inThread = false
     var focused = true { didSet { if focused != oldValue { updateSelectionStyle() } } }
@@ -169,7 +182,6 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         sticky.onClick = { [weak self] _ in self?.jumpToDay() }
         jumpTop.onClick = { [weak self] p in self?.jumpTopClicked(p) }
         jumpBottom.onClick = { [weak self] _ in self?.scrollToBottom() }
-        jumpBottom.kind = .bottom(newCount: 0)
         _ = Body.pBody
     }
 
@@ -216,7 +228,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let atBottom = isAtBottom
         let anchor = scrollAnchor
         let prevLast = messages.last?.ts
-        if case .open = mode { cancelEdit(); finishConfirm(false); newWhileScrolledUp = 0 }
+        if case .open = mode { cancelEdit(); finishConfirm(false); newWhileScrolledUp = 0; dismissBar() }
         if case .open(let after, _) = mode { unreadAfter = after }
         if case .at = mode { unreadAfter = nil }
 
@@ -391,7 +403,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         let r = rowOf[i]
         table.scrollRowToVisible(r)
         stillCursor?.cancel()
-        let w = hoverBar.beginConfirm()
+        let w = hoverBar.beginConfirm(replies: inThread ? 0 : messages[i].replyCount)
         placeBar(row: r, width: w)
         hoverBar.isHidden = false
     }
@@ -569,6 +581,16 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private func mentionsMe(_ e: RowEntry) -> Bool { e.message.mentionsMe || e.body.mentionsMe }
     private func isMine(_ m: Message) -> Bool { m.isMine || (context.me != nil && m.user == context.me) }
 
+    private func redrawSummaries(_ ts: Set<String>) {
+        guard !inThread, !ts.isEmpty else { return }
+        var rows = IndexSet()
+        for t in ts { if let i = indexOfTS[t], messages[i].replyCount > 0 { rows.insert(rowOf[i]) } }
+        if !rows.isEmpty { table.reloadData(forRowIndexes: rows, columnIndexes: [0]) }
+    }
+
+    /// Timestamps changed format: every visible header and gutter redraws.
+    func redrawAll() { table.reloadData() }
+
     private func contextChanged() {
         guard !messages.isEmpty else { return }
         cache = [:]
@@ -679,15 +701,20 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         watchBottom()
     }
 
+    /// The script's `focuswin`: headless windows never become key, so U3's
+    /// read-on-view can only be checked with this on.
+    static var assumeKeyWindow = false
+    private var windowFocused: Bool { window?.isKeyWindow == true || Self.assumeKeyWindow }
+
     private func watchBottom() {
         let lastVisible = isAtBottom && !items.isEmpty
         if lastVisible { newWhileScrolledUp = 0 }
-        guard lastVisible, window?.isKeyWindow == true else { bottomTimer?.cancel(); bottomTimer = nil; return }
+        guard lastVisible, windowFocused else { bottomTimer?.cancel(); bottomTimer = nil; return }
         guard bottomTimer == nil else { return }
         let w = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.bottomTimer = nil
-            if self.isAtBottom, self.window?.isKeyWindow == true { self.actions.bottomVisible() }
+            if self.isAtBottom, self.windowFocused { self.actions.bottomVisible() }
         }
         bottomTimer = w
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: w)
@@ -803,6 +830,21 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         hoverBar.needsLayout = true
     }
 
+    /// The bar leaves when it isn't the mouse's: a channel switch, an
+    /// overlay, or typing in a composer.
+    func dismissBar() {
+        stillCursor?.cancel()
+        guard confirmingTS == nil else { return }
+        hoveredRow = nil
+        hoverBar.isHidden = true
+    }
+
+    /// Typing moved into a text field: a bar the keyboard cursor put up goes.
+    func keyboardLeft() {
+        guard !mouseInside else { return }
+        dismissBar()
+    }
+
     /// No mouse over the list: the bar comes to the cursor row after it's been still for 400 ms.
     private func cursorMoved() {
         stillCursor?.cancel()
@@ -810,7 +852,8 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         refreshLit()
         guard !mouseInside else { return }
         let w = DispatchWorkItem { [weak self] in
-            guard let self, !self.mouseInside, self.confirmingTS == nil, let s = self.selected, self.editingTS == nil else { return }
+            guard let self, !self.mouseInside, self.confirmingTS == nil, let s = self.selected, self.editingTS == nil,
+                  self.focused, !(self.window?.firstResponder is NSTextView) else { return }
             let r = self.rowOf[s]
             let bw = self.hoverBar.configure(mine: self.isMine(self.messages[s]), quick: self.actions.quickReactions())
             self.placeBar(row: r, width: bw)
@@ -961,7 +1004,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         if !inThread, m.replyCount > 0 {
             let repliers = m.replyUsers.prefix(3).map { id in (id: id, name: context.person(id)?.label ?? context.name(id), url: context.person(id)?.image48) }
             thread = .init(count: m.replyCount, latest: m.latestReply.flatMap(Double.init).map { Date(timeIntervalSince1970: $0) },
-                           repliers: repliers, draft: context.draftThreads.contains(m.ts), unread: context.threadUnread(m.ts))
+                           repliers: repliers, draft: draftThreads.contains(m.ts), unread: unreadThreads.contains(m.ts))
         }
         let pending = m.local.map { $0.state == .pending || $0.state == .sending } ?? false
         cell.configure(body: e.body.text, header: header, gutter: grouped ? TimeLabel.gutter(m.date) : nil, avatar: avatar, bot: m.isBot,

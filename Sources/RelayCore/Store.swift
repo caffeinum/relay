@@ -302,22 +302,22 @@ public final class Store {
         let members = Dictionary(grouping: try db.query("""
             SELECT channel, user FROM members WHERE channel IN (SELECT id FROM convs WHERE kind='mpim') ORDER BY rowid
             """) { ($0.text(0), $0.text(1)) }, by: \.0)
+        let byHandle = Dictionary(try people().map { ($0.handle, $0) }, uniquingKeysWith: { a, _ in a })
         return convs.map { c in
             guard c.kind == .mpim else { return c }
             var c = c
-            c.name = mpimName(c.name, members: members[c.id]?.map(\.1), me: me)
+            c.name = mpimName(c.name, members: members[c.id]?.map(\.1), me: me, byHandle: byHandle)
             return c
         }
     }
 
     /// The members' names when known, else the handles out of Slack's
     /// `mpdm-a--b--c-1` name, each resolved when the handle is known.
-    func mpimName(_ raw: String, members: [String]?, me: String) -> String {
+    func mpimName(_ raw: String, members: [String]?, me: String, byHandle: [String: Person]) -> String {
         if let members, !members.isEmpty { return members.filter { $0 != me }.map(name(of:)).joined(separator: ", ") }
         guard raw.hasPrefix("mpdm-") else { return raw }
         var body = raw.dropFirst(5)
         if let dash = body.lastIndex(of: "-"), body[body.index(after: dash)...].allSatisfy(\.isNumber) { body = body[..<dash] }
-        let byHandle = Dictionary((try? people())?.map { ($0.handle, $0) } ?? [], uniquingKeysWith: { a, _ in a })
         let mine = me.isEmpty ? nil : person(me)?.handle
         return body.components(separatedBy: "--").filter { $0 != mine }.map { byHandle[$0]?.label ?? $0 }.joined(separator: ", ")
     }
@@ -469,9 +469,14 @@ public final class Store {
 
     // MARK: message reads
 
+    /// latest_reply falls back to the newest cached reply: history from
+    /// some servers (the emulator) leaves it out on parents.
     static let messageColumns = """
-        id, channel, ts, thread_ts, user, text, subtype, reply_count, latest_reply, edited_ts, reactions,
-        bot_id, username, attachments, reply_users
+        id, channel, ts, thread_ts, user, text, subtype, reply_count,
+        CASE WHEN latest_reply IS NULL AND reply_count > 0 THEN
+          (SELECT max(r.ts) FROM messages r WHERE r.channel = messages.channel AND r.thread_ts = messages.ts AND r.ts != messages.ts)
+        ELSE latest_reply END,
+        edited_ts, reactions, bot_id, username, attachments, reply_users
         """
 
     /// What every row of one read shares, looked up once.
@@ -530,6 +535,16 @@ public final class Store {
         return try withEcho(Array(ms), channel: channel, thread: nil, sends: true)
     }
 
+    /// Every top-level message from `ts` on, plus local echo: the window a
+    /// scrolled-back list already shows, redrawn after a change.
+    public func messages(_ channel: String, since ts: String) throws -> [Message] {
+        let ms = try rows("""
+            SELECT \(Self.messageColumns) FROM messages
+            WHERE channel=? AND ts >= ? AND (thread_ts IS NULL OR thread_ts = ts) ORDER BY ts
+            """, [channel, ts])
+        return try withEcho(ms, channel: channel, thread: nil, sends: true)
+    }
+
     /// One page further back, oldest first.
     public func messages(_ channel: String, before ts: String, limit: Int) throws -> [Message] {
         let ms = try rows("""
@@ -568,12 +583,13 @@ public final class Store {
     }
 
     /// Local search: fts5 prefix match on every word, newest first.
-    public func search(_ query: String, limit: Int = 100) throws -> [Hit] {
+    /// `labels` (id → "#name") saves a conversations() read per keystroke.
+    public func search(_ query: String, limit: Int = 100, labels: [String: String]? = nil) throws -> [Hit] {
         let words = query.split(whereSeparator: { $0.isWhitespace }).map { w in
             "\"" + w.replacingOccurrences(of: "\"", with: "\"\"") + "\"*"
         }
         guard !words.isEmpty else { return [] }
-        let convs = Dictionary(uniqueKeysWithValues: try conversations().map { ($0.id, $0.label) })
+        let convs = try labels ?? Dictionary(uniqueKeysWithValues: try conversations().map { ($0.id, $0.label) })
         return try db.query("""
             SELECT m.channel, m.ts, m.user, m.text FROM msg_fts f JOIN messages m ON m.id = f.rowid
             WHERE msg_fts MATCH ? ORDER BY m.ts DESC LIMIT ?

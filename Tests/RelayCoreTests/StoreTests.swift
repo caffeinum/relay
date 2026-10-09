@@ -68,6 +68,70 @@ private func conv(_ id: String, _ name: String, lastRead: String = "0") -> Slack
 }
 
 @Test func writesAreRefusedByDefault() async throws {
-    let slack = Slack(api: "http://127.0.0.1:9/api", token: "t")
-    await #expect(throws: SlackError.self) { let _: Envelope = try await slack.call("chat.postMessage", ["text": "hi"]) }
+    let fake = FakeSlack()
+    let slack = fake.client(writes: false)
+    do {
+        let _: Envelope = try await slack.call("chat.postMessage", ["text": "hi"])
+        Issue.record("a write went through with writes off")
+    } catch SlackError.writeBlocked(let m) {
+        #expect(m == "chat.postMessage")
+    }
+    #expect(fake.calls.isEmpty, "no request may leave when writes are off")
+    #expect(Config.starter.workspaces["2027dev"]?.writes != true, "the starter config keeps the real workspace read-only")
+}
+
+@Test func parentsWithoutLatestReplyTakeTheNewestCachedReply() throws {
+    let s = try tempStore()
+    try s.put(conversations: [conv("C1", "eng")], me: "UME")
+    var root = msg("1.0", "U2", "root", thread: "1.0")
+    root.reply_count = 2
+    try s.put(messages: [root, msg("2.0", "U3", "a", thread: "1.0"), msg("3.0", "U3", "b", thread: "1.0")], channel: "C1")
+    #expect(try s.messages("C1").first?.latestReply == "3.0")
+}
+
+@Test func unreadThreadsUseThreadReadElseTheChannelCursor() throws {
+    let s = try tempStore()
+    try s.put(conversations: [conv("C1", "eng", lastRead: "5.0")], me: "UME")
+    try s.setUI(.threadRead("C1", "1.0"), "9.0")
+    let roots = [(ts: "1.0", latest: "8.0"), (ts: "2.0", latest: "6.0"), (ts: "3.0", latest: "4.0"), (ts: "4.0", latest: "10.0")]
+    try s.setUI(.threadRead("C1", "4.0"), "9.0")
+    #expect(try s.unreadThreads("C1", roots: roots) == ["2.0", "4.0"])
+    try s.setUI(.threadRead("C10", "2.0"), "99.0")
+    #expect(try s.unreadThreads("C1", roots: roots) == ["2.0", "4.0"])
+}
+
+@Test func messagesSinceKeepsTheLoadedWindow() throws {
+    let s = try tempStore()
+    try s.put(conversations: [conv("C1", "eng")], me: "UME")
+    try s.put(messages: (1...300).map { msg(String(format: "%d.000000", 1000 + $0), "U2", "m\($0)") }, channel: "C1")
+    #expect(try s.messages("C1").count == 200)
+    #expect(try s.messages("C1", since: "1051.000000").count == 250)
+    #expect(try s.messages("C1", before: "1101.000000", limit: 200).map(\.ts).last == "1100.000000")
+}
+
+@Test func mainThreadReadsDontWaitForABackgroundWrite() async throws {
+    let s = try tempStore()
+    try s.put(conversations: [conv("C1", "eng")], me: "UME")
+    try await MainActor.run { try s.db.openReader() }
+    let started = DispatchSemaphore(value: 0)
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async {
+        try? s.db.transaction {
+            try s.db.run("INSERT INTO kv(key,value) VALUES('held','1')")
+            started.signal()
+            Thread.sleep(forTimeInterval: 0.4)
+        }
+        done.signal()
+    }
+    started.wait()
+    let ms = try await MainActor.run {
+        let t0 = Date()
+        _ = try s.conversations()
+        #expect(try s.value("held") == nil, "an uncommitted write isn't visible to the reader")
+        return Date().timeIntervalSince(t0) * 1000
+    }
+    #expect(ms < 200, "main read waited \(ms) ms")
+    done.wait()
+    let held = try await MainActor.run { try s.value("held") }
+    #expect(held == "1")
 }

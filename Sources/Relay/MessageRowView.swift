@@ -39,6 +39,7 @@ final class MessageRowView: NSTableRowView {
     }
 
     override func drawSelection(in dirtyRect: NSRect) {
+        guard !editing else { return }
         (dim ? Theme.cursorTintDim : Theme.cursorTint).setFill()
         bounds.fill()
         (dim ? Theme.textFaint : Theme.cursor).setFill()

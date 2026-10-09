@@ -9,7 +9,7 @@ extension UIKey where T == [String] {
 /// composer) and a thread pane. Everything on screen before the first
 /// frame comes from sqlite; the network starts after.
 final class MainController: NSObject, NSWindowDelegate {
-    let config: Config
+    var config: Config
     let workspace: String
     let store: Store
     let sync: Sync?
@@ -49,6 +49,9 @@ final class MainController: NSObject, NSWindowDelegate {
     var collapsedGroups: Set<String> = []
     var lastStatus: String?
     var liveStatus: String?
+    var pendingChanges: Set<String> = []
+    var pendingListChange = false
+    var changeScheduled = false
     var onSwitchWorkspace: ((String) -> Void)?
     lazy var mentionIndex: MentionSearch = buildMentionIndex()
     var mentionIndexStale = true
@@ -59,7 +62,8 @@ final class MainController: NSObject, NSWindowDelegate {
         self.store = store
         self.sync = sync
         self.writes = sync?.slack.writes ?? false
-        self.outbox = sync.map { Outbox(store: store, slack: $0.slack) }
+        self.outbox = sync.map { Outbox(store: store, slack: $0.slack, undoSeconds: config.undoSeconds ?? Config.defaultUndoSeconds) }
+        TimeLabel.seconds = config.showSeconds ?? false
         self.appToken = appToken
         self.syncProblem = syncProblem
         window = KeyWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
@@ -151,6 +155,7 @@ final class MainController: NSObject, NSWindowDelegate {
         header.onStar = { [weak self] in self?.run(.star) }
         header.onName = { [weak self] in self?.showPalette(query: "> channel") }
         header.onSearch = { [weak self] in self?.showSearch(scope: self?.current) }
+        header.onMore = { [weak self] r in self?.headerMenu(at: r) }
         threadHeader.onClose = { [weak self] in self?.closeThread() }
         threadHeader.onSubtitle = { [weak self] in self?.closeThread() }
 
@@ -206,7 +211,8 @@ final class MainController: NSObject, NSWindowDelegate {
         starred = cachedUI(.starred) ?? []
         collapsedGroups = Set(cachedUI(.collapsedGroups) ?? [])
         if let s = cachedUI(.sections) {
-            sections = s
+            sections = Sections.backfillIcons(s, from: config.sections ?? [])
+            if sections != s { setUI(.sections, sections) }
         } else {
             sections = Sections.seed(config.sections ?? [])
             setUI(.sections, sections)
@@ -265,16 +271,59 @@ final class MainController: NSObject, NSWindowDelegate {
 
     // MARK: cache → screen
 
+    /// Sync and Live report per conversation (~200 times in a first sync):
+    /// those collect here and redraw once per run-loop turn.
     func cacheChanged(_ channels: Set<String>) {
+        pendingChanges.formUnion(channels)
+        if channels.isEmpty { pendingListChange = true }
+        guard !changeScheduled else { return }
+        changeScheduled = true
+        DispatchQueue.main.async { [weak self] in self?.flushChanges() }
+    }
+
+    private func flushChanges() {
+        let channels = pendingChanges, listChanged = pendingListChange
+        pendingChanges = []
+        pendingListChange = false
+        changeScheduled = false
         mentionIndexStale = true
-        if let id = current?.id, channels.contains(id) || channels.isEmpty {
-            if let ms = cached({ try store.messages(id, limit: max(200, list.messages.filter { $0.id > 0 }.count)) }) {
-                list.context.draftThreads = cached({ try store.draftThreads(id) }) ?? []
-                list.show(ms, mode: .keep)
-            }
+        if listChanged || store.peopleGeneration != list.context.peopleGeneration { refreshContext() }
+        if let id = current?.id, channels.contains(id) || listChanged {
+            redrawChannel(id)
             if let ts = threadTS { thread.show(cached({ try store.thread(id, ts: ts) }) ?? [], mode: .keep) }
         }
         reloadSidebar()
+    }
+
+    /// Keeps the loaded window: everything from the oldest message shown
+    /// (scrollback stays), at least the newest 200. A channel that had
+    /// nothing to show opens properly now: divider and cursor on the unread.
+    private func redrawChannel(_ id: String) {
+        let oldest = list.messages.first { $0.id > 0 }?.ts
+        let loaded = oldest.map { o in cached({ try store.messages(id, since: o) }) ?? nil } ?? cached({ try store.messages(id) })
+        guard var ms = loaded else { return }
+        if ms.count < 200, let more = cached({ try store.messages(id) }), more.count > ms.count { ms = more }
+        setThreadMarks(id, ms)
+        if oldest == nil, !ms.isEmpty, let c = cached({ try store.conversation(id) }) ?? nil {
+            list.show(ms, mode: .open(unreadAfter: c.unread > 0 ? c.lastRead : nil, restore: nil))
+        } else {
+            list.show(ms, mode: .keep)
+        }
+    }
+
+    /// Draft and unread marks on thread summaries, from two queries per show.
+    func setThreadMarks(_ id: String, _ ms: [Message]) {
+        list.draftThreads = cached({ try store.draftThreads(id) }) ?? []
+        let roots = ms.compactMap { m in m.replyCount > 0 ? m.latestReply.map { (ts: m.ts, latest: $0) } : nil }
+        list.unreadThreads = cached({ try store.unreadThreads(id, roots: roots) }) ?? []
+    }
+
+    /// `me`, channel names, groups and emoji land after the first sync and
+    /// the directory fetch; bodies rebuild only when one of them moved.
+    func refreshContext() {
+        let c = context()
+        list.context = c
+        thread.context = c
     }
 
     func reloadSidebar() {
@@ -349,20 +398,14 @@ final class MainController: NSObject, NSWindowDelegate {
 
     func context() -> MessageListContext {
         var c = MessageListContext()
+        c.peopleGeneration = store.peopleGeneration
         c.me = store.me
         c.person = { [store] in store.person($0) }
         c.name = { [store] in store.name(of: $0) }
-        let byID = Dictionary((cached({ try store.conversations() }) ?? []).map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        c.channelName = { byID[$0] }
-        let groups = Dictionary((cached({ try store.usergroups() }) ?? []).map { ($0.id, $0.handle) }, uniquingKeysWith: { a, _ in a })
-        c.groupHandle = { groups[$0] }
+        c.channelNames = Dictionary((cached({ try store.conversations() }) ?? []).map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        c.groupHandles = Dictionary((cached({ try store.usergroups() }) ?? []).map { ($0.id, $0.handle) }, uniquingKeysWith: { a, _ in a })
         c.customEmoji = cached({ try store.customEmoji() }) ?? [:]
         c.writes = writes
-        c.threadUnread = { [weak self] ts in
-            guard let self, let id = self.current?.id, let m = self.list.messages.first(where: { $0.ts == ts }), let latest = m.latestReply else { return false }
-            let read = self.cachedUI(UIKey<String>.threadRead(id, ts)) ?? ts
-            return ListLayout.tsLess(read, latest)
-        }
         return c
     }
 
@@ -402,7 +445,7 @@ final class MainController: NSObject, NSWindowDelegate {
         header.avatar = headerAvatar(c)
         var ms = cached({ try store.messages(c.id) }) ?? []
         if let ts, !ms.contains(where: { $0.ts == ts }) { ms = cached({ try store.messages(c.id, limit: 2000) }) ?? ms }
-        list.context.draftThreads = cached({ try store.draftThreads(c.id) }) ?? []
+        setThreadMarks(c.id, ms)
         if let ts {
             list.show(ms, mode: .at(ts: ts))
         } else {
@@ -430,13 +473,29 @@ final class MainController: NSObject, NSWindowDelegate {
         saveScroll()
     }
 
+    /// U7: the cache first, a page at a time; the network only once the
+    /// cache has nothing older. Its page lands through cacheChanged, which
+    /// keeps the loaded window.
     func loadOlder() {
-        guard let sync, let id = current?.id, !loadingOlder, !store.syncState(id).complete else { return }
+        guard let id = current?.id, !loadingOlder, let oldest = list.messages.first(where: { $0.id > 0 })?.ts else { return }
+        guard let older = cached({ try store.messages(id, before: oldest, limit: 200) }) else { return }
+        if !older.isEmpty {
+            list.show(older + list.messages, mode: .keep)
+            return
+        }
+        guard let sync, !store.syncState(id).complete else { return }
         loadingOlder = true
         sync.run { [weak self] s in
             defer { DispatchQueue.main.async { self?.loadingOlder = false } }
             _ = try await s.older(id)
+            DispatchQueue.main.async { self?.pageInOlder(id, before: oldest) }
         }
+    }
+
+    private func pageInOlder(_ id: String, before oldest: String) {
+        guard current?.id == id, let older = cached({ try store.messages(id, before: oldest, limit: 200) }), !older.isEmpty,
+              list.messages.first(where: { $0.id > 0 })?.ts == oldest else { return }
+        list.show(older + list.messages, mode: .keep)
     }
 
     func openThread(ts root: String, focus: Bool) {

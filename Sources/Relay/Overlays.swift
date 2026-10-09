@@ -135,18 +135,38 @@ final class SearchOverlay: PickerOverlay {
         }
     }
 
+    private lazy var labels: [String: String]? = {
+        do { return Dictionary(try store.conversations().map { ($0.id, $0.label) }, uniquingKeysWith: { a, _ in a }) } catch {
+            note.stringValue = "Conversations failed to load: \(error)"
+            return nil
+        }
+    }()
+
+    /// fts runs off main (p95 ~46 ms on 100k messages); a stale answer is dropped.
     override func queryChanged(_ q: String) {
         generation += 1
         let gen = generation
-        let local: [Hit]
-        do { local = try store.search(q) } catch {
-            items = []
-            note.stringValue = "Local search failed: \(error)"
-            return
+        remoteWork?.cancel()
+        guard let labels else { return }
+        let store = self.store
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = Result { try store.search(q, labels: labels) }
+            DispatchQueue.main.async {
+                guard let self, self.generation == gen else { return }
+                switch result {
+                case .success(let local): self.showLocal(local, q, gen)
+                case .failure(let error):
+                    self.items = []
+                    self.note.stringValue = "Local search failed: \(error)"
+                    log("search: \(error)")
+                }
+            }
         }
+    }
+
+    private func showLocal(_ local: [Hit], _ q: String, _ gen: Int) {
         items = items(local)
         note.stringValue = q.isEmpty ? "local results first, then Slack's" : "\(local.count) in the cache"
-        remoteWork?.cancel()
         guard let sync, q.count >= 2 else { return }
         let w = DispatchWorkItem { [weak self] in
             Task {

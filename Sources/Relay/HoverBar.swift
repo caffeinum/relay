@@ -57,11 +57,15 @@ final class HoverBar: NSView, NSViewToolTipOwner {
         return x + 2
     }
 
-    func beginConfirm() -> CGFloat {
+    private var confirmLabel = "Delete message?"
+
+    /// E4: a parent with replies says what stays.
+    func beginConfirm(replies: Int = 0) -> CGFloat {
         confirming = true
         hoveredIndex = nil
         removeAllToolTips()
-        let label = NSAttributedString(string: "Delete message?", attributes: [.font: Theme.Font.small, .foregroundColor: Theme.text]).size().width
+        confirmLabel = replies > 0 ? "Delete message? (keeps \(replies) repl\(replies == 1 ? "y" : "ies"))" : "Delete message?"
+        let label = NSAttributedString(string: confirmLabel, attributes: [.font: Theme.Font.small, .foregroundColor: Theme.text]).size().width
         let x = 12 + label.rounded(.up) + 12
         confirmButtons = (NSRect(x: x, y: 5, width: 60, height: 24), NSRect(x: x + 66, y: 5, width: 60, height: 24))
         needsDisplay = true
@@ -116,7 +120,7 @@ final class HoverBar: NSView, NSViewToolTipOwner {
     }
 
     private func drawConfirm() {
-        let label = NSAttributedString(string: "Delete message?", attributes: [.font: Theme.Font.small, .foregroundColor: Theme.text])
+        let label = NSAttributedString(string: confirmLabel, attributes: [.font: Theme.Font.small, .foregroundColor: Theme.text])
         let s = label.size()
         label.draw(at: NSPoint(x: 12, y: (bounds.height - s.height) / 2))
         let c = confirmButtons

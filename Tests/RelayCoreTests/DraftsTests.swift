@@ -66,3 +66,17 @@ import Testing
     try s.setValue("ui.current", "C1")
     #expect(try s.ui(.current) == nil)
 }
+
+@Test func undoneThreadSendJoinsItsThreadDraftNotTheChannel() throws {
+    let s = try makeStore()
+    try s.saveDraft(Draft(channel: "C1", threadTS: nil, text: "channel text", selection: NSRange()))
+    try s.appendDraft(channel: "C1", thread: "5.0", text: "the reply")
+    #expect(try s.draft("C1", thread: "5.0")?.text == "the reply")
+    #expect(try s.draft("C1", thread: nil)?.text == "channel text")
+    try s.saveDraft(Draft(channel: "C1", threadTS: "5.0", text: "typed since", selection: NSRange()))
+    try s.appendDraft(channel: "C1", thread: "5.0", text: "the reply")
+    let d = try #require(try s.draft("C1", thread: "5.0"))
+    #expect(d.text == "typed since\nthe reply")
+    #expect(d.selection == NSRange(location: (d.text as NSString).length, length: 0))
+    #expect(Draft.merge("  ", "x") == "x")
+}

@@ -41,21 +41,41 @@ public struct Config: Codable, Equatable {
     public struct Section: Codable, Equatable {
         public var name: String
         public var channels: [String]
-        public init(name: String, channels: [String]) { self.name = name; self.channels = channels }
+        public var collapsed: Bool?
+        public var emoji: String?
+        public init(name: String, channels: [String], collapsed: Bool? = nil, emoji: String? = nil) {
+            self.name = name; self.channels = channels; self.collapsed = collapsed; self.emoji = emoji
+        }
     }
 
     public var workspace: String
     public var workspaces: [String: Workspace]
     public var sections: [Section]?
+    /// The outbox's undo window (O1); 5 s when absent.
+    public var undoSeconds: Double?
+    /// Timestamps with seconds (K-3 toggle).
+    public var showSeconds: Bool?
 
-    public init(workspace: String, workspaces: [String: Workspace], sections: [Section]? = nil) {
+    public static let defaultUndoSeconds: Double = 5
+
+    public init(workspace: String, workspaces: [String: Workspace], sections: [Section]? = nil, undoSeconds: Double? = nil, showSeconds: Bool? = nil) {
         self.workspace = workspace; self.workspaces = workspaces; self.sections = sections
+        self.undoSeconds = undoSeconds; self.showSeconds = showSeconds
+    }
+
+    /// Reads the file fresh, changes it and writes it back atomically, so
+    /// edits made by hand since launch survive a toggle.
+    public static func update(at url: URL = Paths.config, _ change: (inout Config) -> Void) throws -> Config {
+        var c = try load(from: url)
+        change(&c)
+        try c.save(to: url)
+        return c
     }
 
     public static let starter = Config(
         workspace: "emulator",
         workspaces: [
-            "2027dev": Workspace(api: "https://slack.com/api", writes: true),
+            "2027dev": Workspace(api: "https://slack.com/api"),
             "emulator": Workspace(api: "http://localhost:4003/api", token: "xoxp-emu-aleks", writes: true),
         ],
         sections: [Section(name: "Customers", channels: ["customers"])])

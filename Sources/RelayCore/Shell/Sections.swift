@@ -13,8 +13,8 @@ public struct SidebarGroup: Equatable {
     public var hidden: Int
 }
 
-/// Where each conversation goes in the sidebar (S1–S3): Starred, then the
-/// local sections in order, then Channels, then Direct messages. A
+/// Where each conversation goes in the sidebar (C1, S1–S3): the local
+/// sections in order, then Starred, then Channels, then Direct messages. A
 /// conversation shows once; the first group that claims it wins.
 public enum Sections {
     public static let starredID = "starred", channelsID = "channels", directsID = "directs"
@@ -46,11 +46,6 @@ public enum Sections {
             groups.append(SidebarGroup(id: id, name: name, icon: icon, kind: kind, collapsed: collapsed, rows: shown, hidden: sorted.count - shown.count))
         }
 
-        let stars = starred.compactMap { s -> Conversation? in
-            guard let c = resolve(s) else { missing.append(s); return nil }
-            return c
-        }
-        add(starredID, "Starred", "star", .starred, stars, collapsed: collapsed.contains(starredID), sort: .recent)
         for s in sections {
             let cs = s.channels.compactMap { e -> Conversation? in
                 guard let c = resolve(e) else { missing.append(e); return nil }
@@ -58,6 +53,11 @@ public enum Sections {
             }
             add(s.id, s.name, s.icon, .section, cs, collapsed: s.collapsed, sort: s.sort)
         }
+        let stars = starred.compactMap { s -> Conversation? in
+            guard let c = resolve(s) else { missing.append(s); return nil }
+            return c
+        }
+        add(starredID, "Starred", "star", .starred, stars, collapsed: collapsed.contains(starredID), sort: .recent)
         add(channelsID, "Channels", nil, .channels, convs.filter { !$0.isDM }, collapsed: collapsed.contains(channelsID), sort: .recent)
         add(directsID, "Direct messages", nil, .directs, convs.filter(\.isDM), collapsed: collapsed.contains(directsID), sort: .recent)
         return Placement(groups: groups, missing: missing)
@@ -80,7 +80,28 @@ public enum Sections {
 
     /// The sections seeded once from config (plan §0: kv is the source after that).
     public static func seed(_ config: [Config.Section]) -> [SectionState] {
-        config.enumerated().map { i, s in SectionState(id: "s\(i)-\(s.name.lowercased())", name: s.name, channels: s.channels, sort: .recent) }
+        config.enumerated().map { i, s in
+            SectionState(id: "s\(i)-\(s.name.lowercased())", name: s.name, icon: s.emoji, channels: s.channels, collapsed: s.collapsed ?? false, sort: .recent)
+        }
+    }
+
+    /// Sections seeded before config carried `emoji` pick it up by name; an icon set locally stays.
+    public static func backfillIcons(_ sections: [SectionState], from config: [Config.Section]) -> [SectionState] {
+        let emoji = Dictionary(config.compactMap { s in s.emoji.map { (s.name.lowercased(), $0) } }, uniquingKeysWith: { a, _ in a })
+        return sections.map { s in
+            var s = s
+            if s.icon == nil { s.icon = emoji[s.name.lowercased()] }
+            return s
+        }
+    }
+
+    /// S4 "Move section Y up/down": clamped at either end.
+    public static func reorder(_ sections: [SectionState], _ id: String, by d: Int) -> [SectionState] {
+        guard let i = sections.firstIndex(where: { $0.id == id }) else { return sections }
+        let j = max(0, min(sections.count - 1, i + d))
+        var out = sections
+        out.insert(out.remove(at: i), at: j)
+        return out
     }
 
     /// Moves `channel` into section `to` (nil: back to Channels / DMs), out of every other section.

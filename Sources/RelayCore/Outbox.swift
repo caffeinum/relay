@@ -62,7 +62,7 @@ public final class Outbox {
     public var onError: ((OutboxItem, Error) -> Void)?
     private let timers = DispatchQueue(label: "\(Brand.bundleID).outbox")
 
-    public static let quitError = "not sent: app quit"
+    public static let quitError = "app quit"
     static let tooLateWindow: TimeInterval = 30
 
     public init(store: Store, slack: Slack, undoSeconds: Double = 5) {

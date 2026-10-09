@@ -62,6 +62,7 @@ func bench(_ n: Int) throws {
         var env = ProcessInfo.processInfo.environment
         env["\(prefix)_BENCH"] = "1"
         env["\(prefix)_BENCH_HOLD"] = "1"
+        env["\(prefix)_OFFLINE"] = "1"
         p.environment = env
         let out = Pipe()
         p.standardOutput = out

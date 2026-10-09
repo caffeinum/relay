@@ -34,6 +34,7 @@ extension MainController {
         c.popupHost = root
         c.onSend = { [weak self, weak c] text in if let c { self?.send(text, from: c) } }
         c.onSaveDraft = { [weak self] d in self?.saveDraft(d) }
+        c.onFocus = { [weak self] in self?.list.keyboardLeft(); self?.thread.keyboardLeft() }
         c.onEditLast = { [weak self] in self?.editLast(inThread: inThread) }
         c.onUndoEmpty = { [weak self] in self?.undo(); return true }
         c.onEscape = { [weak self, weak c] in
@@ -69,8 +70,7 @@ extension MainController {
         let hadDraft = current?.hasDraft ?? false
         let hasNow = !d.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ((cached({ try store.draftThreads(d.channel) }) ?? []).isEmpty == false)
         if d.threadTS != nil, let id = current?.id, id == d.channel {
-            list.context.draftThreads = cached({ try store.draftThreads(id) }) ?? []
-            if let ts = d.threadTS { list.reload(ts: [ts]) }
+            list.draftThreads = cached({ try store.draftThreads(id) }) ?? []
         }
         if hadDraft != hasNow || d.channel != current?.id { reloadSidebar() } else { sidebar.draftCount = (cached({ try store.drafts() }) ?? []).count }
     }
@@ -167,13 +167,13 @@ extension MainController {
             switch try outbox.undo() {
             case .undone(let item):
                 if item.kind == .send, let text = item.text {
-                    let c = item.threadTS != nil && item.threadTS == threadTS ? threadComposer : composer
-                    if c.key.channel == item.channel {
-                        let (t, tokens) = decodeDraft(text)
+                    if let c = [composer, threadComposer].first(where: { $0.key.channel == item.channel && $0.key.thread == item.threadTS }) {
+                        let merged = Draft.merge(c.mrkdwn, text)
+                        let (t, tokens) = decodeDraft(merged)
                         c.put(t, tokens: tokens)
                         c.focus()
                     } else {
-                        try store.saveDraft(Draft(channel: item.channel, threadTS: item.threadTS, text: text, selection: NSRange(location: (text as NSString).length, length: 0)))
+                        try store.appendDraft(channel: item.channel, thread: item.threadTS, text: text)
                     }
                 }
                 toast.show(item.kind == .send ? "Unsent" : item.kind == .edit ? "Edit undone" : "Delete undone", kind: .success)

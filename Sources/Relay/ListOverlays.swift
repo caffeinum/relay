@@ -69,6 +69,13 @@ final class JumpPill: FloatingPill {
     private(set) var markRect: NSRect = .zero
     private var isMentions: Bool { if case .mentions = kind { return true }; return false }
 
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        resize()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
     private var title: String {
         switch kind {
         case .unread(let n): return "\(n) new message\(n == 1 ? "" : "s")"

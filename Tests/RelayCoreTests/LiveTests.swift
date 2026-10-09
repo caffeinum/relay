@@ -144,3 +144,14 @@ private final class Statuses: @unchecked Sendable {
     func add(_ x: Live.Status) { lock.withLock { s.append(x) } }
     var all: [Live.Status] { lock.withLock { s } }
 }
+
+@Test func socketErrorsLoseTheirURL() {
+    let e = NSError(domain: NSURLErrorDomain, code: -1005, userInfo: [
+        NSLocalizedDescriptionKey: "The network connection was lost.",
+        NSURLErrorFailingURLStringErrorKey: "wss://wss-primary.slack.com/link/?ticket=secret-ticket&app_id=A1",
+    ])
+    let s = Live.describe(e)
+    #expect(!s.contains("ticket"))
+    #expect(s.contains("-1005"))
+    #expect(s.contains("connection was lost"))
+}

@@ -25,6 +25,7 @@ final class Composer: NSView, NSTextViewDelegate {
     var onSaveDraft: ((Draft) -> Void)?
     var onUndoEmpty: (() -> Bool)?
     var onEmoji: (() -> Void)?
+    var onFocus: (() -> Void)?
     var readOnly = false { didSet { toolbar.readOnly = readOnly; relayout() } }
     var maxHeight: CGFloat = 300
 
@@ -58,6 +59,7 @@ final class Composer: NSView, NSTextViewDelegate {
         t.placeholder = placeholderText
         t.complete = complete
         t.popupHost = popupHost
+        t.popupAnchor = self
         t.onCommandReturn = { [weak self] in self?.send() }
         t.onUndoEmpty = { [weak self] in self?.onUndoEmpty?() ?? false }
         needsLayout = true
@@ -182,6 +184,7 @@ final class Composer: NSView, NSTextViewDelegate {
         let f = focused
         guard f != wasFocused else { return }
         wasFocused = f
+        if f { onFocus?() }
         relayout()
     }
 
@@ -214,6 +217,7 @@ final class Composer: NSView, NSTextViewDelegate {
         scroll.frame = NSRect(x: 12, y: 11, width: bounds.width - 24, height: bounds.height - 22 - tb)
         tv?.frame.size.width = scroll.contentSize.width
         toolbar.frame = NSRect(x: 6, y: bounds.height - tb, width: bounds.width - 12, height: tb)
+        tv?.repositionPopup()
     }
 
     override func setFrameSize(_ s: NSSize) {

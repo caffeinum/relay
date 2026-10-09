@@ -30,7 +30,8 @@ enum Script {
         case "load": if let c = main.current, let ms = try? main.store.messages(c.id, limit: Int(arg) ?? 2000) { main.list.show(ms, mode: .open(unreadAfter: nil, restore: nil)) }
         case "confirm": if let i = Int(arg).map({ $0 < 0 ? main.list.messages.count + $0 : $0 }), main.list.messages.indices.contains(i) { main.list.confirmDelete(ts: main.list.messages[i].ts) }
         case "appearance": NSApp.appearance = NSAppearance(named: arg == "light" ? .aqua : .darkAqua)
-        case "me": main.list.context.me = main.store.me; main.thread.context.me = main.store.me
+        case "me": main.refreshContext()
+        case "focuswin": MessageList.assumeKeyWindow = arg != "off"
         case "timing": print("script:", main.list.lastShowTiming)
         case "open": if let c = main.sidebar.allConversations.first(where: { $0.label == arg || $0.name == arg || $0.id == arg }) { main.open(c.id) } else { print("script: no conversation \(arg)") }
         case "thread": if let i = Int(arg).map({ $0 < 0 ? main.list.messages.count + $0 : $0 }), main.list.messages.indices.contains(i) { main.list.select(i); main.openThread() }
@@ -63,6 +64,7 @@ enum Script {
         var key = k
         if key.hasPrefix("cmd-") { mods.insert(.command); key = String(key.dropFirst(4)) }
         if key.hasPrefix("ctrl-") { mods.insert(.control); key = String(key.dropFirst(5)) }
+        if key.count > 1, codes[key] == nil { print("script: unknown key \(k) (known: \(codes.keys.sorted().joined(separator: ", ")))"); fflush(stdout); return }
         let code = codes[key] ?? 0
         let named = ["return": "\r", "esc": "\u{1b}", "space": " ", "down": "\u{F701}", "up": "\u{F700}", "right": "\u{F703}", "left": "\u{F702}", "home": "\u{F729}", "end": "\u{F72B}", "pageup": "\u{F72C}", "pagedown": "\u{F72D}", "tab": "\t"]
         let chars = codes[key] != nil ? (named[key] ?? "") : key

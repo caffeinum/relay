@@ -16,7 +16,15 @@ final class Avatars {
     private var order: [String] = []
     private var loading: Set<String> = []
     private var failed: Set<String> = []
-    private let queue = DispatchQueue(label: "\(Brand.bundleID).avatars", qos: .utility, attributes: .concurrent)
+    /// Four at a time: each fetch blocks its thread on the network, and an
+    /// unbounded queue on first sync would take GCD's whole thread pool.
+    private let queue: OperationQueue = {
+        let q = OperationQueue()
+        q.name = "\(Brand.bundleID).avatars"
+        q.maxConcurrentOperationCount = 4
+        q.qualityOfService = .utility
+        return q
+    }()
     private let limit = 512
 
     func layerContents(for id: String, name: String, url: String?, size: CGFloat, scale: CGFloat = 2) -> CGImage {
@@ -78,10 +86,11 @@ final class Avatars {
         }
         loading.insert(key)
         let path = diskPath(id, url)
-        queue.async { [weak self] in
+        queue.addOperation { [weak self] in
             let data: Data
+            var fromDisk = false
             do {
-                if let d = try? Data(contentsOf: path) { data = d } else {
+                if let d = try? Data(contentsOf: path) { data = d; fromDisk = true } else {
                     data = try Data(contentsOf: remote)
                     try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try data.write(to: path, options: .atomic)
@@ -93,6 +102,9 @@ final class Avatars {
             let opts = [kCGImageSourceShouldCacheImmediately: true, kCGImageSourceCreateThumbnailFromImageAlways: true,
                         kCGImageSourceThumbnailMaxPixelSize: 96] as CFDictionary
             let img = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, opts) }
+            if img == nil, fromDisk {
+                do { try FileManager.default.removeItem(at: path) } catch { log("avatar \(id): can't remove corrupt \(path.lastPathComponent): \(error)") }
+            }
             DispatchQueue.main.async { self?.finish(id: id, key: key, image: img, error: img == nil ? "can't decode \(data.count) bytes" : nil) }
         }
     }

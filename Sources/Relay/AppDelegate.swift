@@ -66,8 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + (Brand.env("BENCH_HOLD") != nil ? 1.5 : 0)) { exit(0) }
             }
             buildMenu()
+            main.store.db.openReaderInBackground { [weak self] e in self?.main.report(e, "read connection") }
             main.composer.install()
-            if Brand.env("OFFLINE") == nil { main.start() }
+            if Brand.env("OFFLINE") == nil, !Launch.bench { main.start() }
             Script.run(main)
         }
     }
@@ -85,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             main = try controller(config)
             old?.window.orderOut(nil)
             main.showFirstFrame()
+            main.store.db.openReaderInBackground { [weak self] e in self?.main.report(e, "read connection") }
             main.start()
         } catch {
             main.toast.show("\(error)", error: true)
