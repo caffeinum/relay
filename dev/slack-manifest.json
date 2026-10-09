@@ -1,0 +1,27 @@
+{
+  "display_information": { "name": "relay", "description": "Native macOS client for this workspace (internal)." },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "channels:history", "channels:read", "channels:write",
+        "groups:history", "groups:read", "groups:write",
+        "im:history", "im:read", "im:write",
+        "mpim:history", "mpim:read", "mpim:write",
+        "users:read", "users.profile:read", "team:read", "usergroups:read", "emoji:read",
+        "search:read", "reactions:read", "reactions:write", "chat:write", "files:read", "pins:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "user_events": [
+        "message.channels", "message.groups", "message.im", "message.mpim",
+        "reaction_added", "reaction_removed"
+      ]
+    },
+    "interactivity": { "is_enabled": false },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

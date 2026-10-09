@@ -131,7 +131,7 @@ final class MainController: NSObject, NSWindowDelegate {
         if let first { showChannel(first, cursor: nil) }
         Launch.mark("rows")
         sidebar.status.stringValue = syncProblem ?? lastSyncedText
-        window.makeKeyAndOrderFront(nil)
+        if Launch.headless { window.setFrameOrigin(NSPoint(x: -20000, y: -20000)) } else { window.makeKeyAndOrderFront(nil) }
         Launch.mark("ordered")
         window.displayIfNeeded()
         CATransaction.flush()

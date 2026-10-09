@@ -42,7 +42,7 @@ enum Script {
         guard let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,
                                        windowNumber: window.windowNumber, context: nil, characters: chars,
                                        charactersIgnoringModifiers: chars, isARepeat: false, keyCode: code) else { return }
-        NSApp.sendEvent(e)
+        if Launch.headless { window.sendEvent(e) } else { NSApp.sendEvent(e) }
     }
 
     /// Into whatever has focus: a search or palette field.

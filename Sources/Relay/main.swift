@@ -17,6 +17,7 @@ enum Launch {
 
     static var sinceStart: Double { Date().timeIntervalSince(processStart) * 1000 }
     static let bench = Brand.env("BENCH") != nil
+    static let headless = Brand.env("HEADLESS") != nil
     static var marks: [(String, Double)] = []
     static var firstFrame: Double = 0
     static func mark(_ s: String) { if bench { marks.append((s, sinceStart)) } }
@@ -27,5 +28,7 @@ Launch.mark("main")
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(.regular)
+// RELAY_HEADLESS: no Dock tile, no window on screen. Script snaps still
+// render the window's views, so the UI can be checked without showing it.
+app.setActivationPolicy(Launch.headless ? .prohibited : .regular)
 app.run()

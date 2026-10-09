@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         Launch.mark("didFinishLaunching")
         guard main != nil else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        if !Launch.headless { NSApp.activate(ignoringOtherApps: true) }
 
         // Everything past the first frame waits a turn of the run loop, so
         // none of it is paid for before the window is on screen.

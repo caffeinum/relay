@@ -14,3 +14,6 @@ The approved plan is in README.md.
 - `dev/emulator.sh` starts the slack emulator on :4003 (tmux `relay-emulator`) and seeds it; the starter config (`relayctl init`) points the `emulator` workspace at it with token `xoxp-emu-aleks`. Real workspaces never take an inline token.
 - Writes are refused in `Slack.call` unless the workspace has `"writes": true`.
 - `relayctl bench N` measures cold start: app-reported first frame and window-on-screen from outside.
+- `RELAY_HEADLESS=1` runs with no Dock tile and the window off screen; `RELAY_SCRIPT` snaps still render. Use it for every visual check while the operator is at the machine, never pop the window in front of them.
+- `PORT=4013 dev/emulator.sh` runs a second emulator (tmux `relay-emulator-<port>`) so parallel work doesn't share state.
+- `dev/slack-manifest.json` is the internal app's manifest; `dev/store-token.sh <ws>.user|<ws>.app` moves a token from the clipboard to the keychain.
