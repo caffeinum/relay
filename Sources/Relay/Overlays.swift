@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 /// A field over a list: ⌘K and / are both this. Typing refilters, ↑/↓ (or
 /// ⌃n/⌃p) move, ↩ picks, esc closes.

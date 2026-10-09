@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import ChatCore
+@testable import RelayCore
 
 private func tempStore() throws -> Store {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 enum Palette {
     static let background = NSColor.textBackgroundColor

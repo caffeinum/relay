@@ -1,4 +1,4 @@
-# chat
+# Relay
 
 A native macOS Slack client that opens instantly and runs from the keyboard.
 The Slack web app is slow, and even editing a message takes Up + E.
@@ -43,7 +43,7 @@ right.
 | `z` | undo a send or edit for a few seconds |
 
 Shared with Reply: one keymap file in `~/.config`, the cache / outbox /
-keychain pattern, and a local CLI (`chatctl`) that gives agents raw access to
+keychain pattern, and a local CLI (`relayctl`) that gives agents raw access to
 the same objects.
 
 ## Milestones

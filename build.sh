@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds build/<Name>.app around the SwiftPM binary, ad-hoc signed, plus
-# build/<slug>ctl. The name comes from Sources/ChatCore/Brand.swift.
+# build/<slug>ctl. The name comes from Sources/RelayCore/Brand.swift.
 #   ./build.sh           release
 #   ./build.sh debug
 # Only the command line tools are needed; the 26.5 SDK because the 27 SDK's
@@ -9,16 +9,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 CONFIG="${1:-release}"
 export SDKROOT="${SDKROOT:-/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk}"
-NAME=$(sed -n 's/.*static let name = "\(.*\)".*/\1/p' Sources/ChatCore/Brand.swift)
+NAME=$(sed -n 's/.*static let name = "\(.*\)".*/\1/p' Sources/RelayCore/Brand.swift)
 SLUG=$(echo "$NAME" | tr '[:upper:]' '[:lower:]')
-swift build -c "$CONFIG" --product Chat
-swift build -c "$CONFIG" --product chatctl
+swift build -c "$CONFIG" --product Relay
+swift build -c "$CONFIG" --product relayctl
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 APP="build/$NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/Chat" "$APP/Contents/MacOS/$NAME"
-cp "$BIN/chatctl" "build/${SLUG}ctl"
+cp "$BIN/Relay" "$APP/Contents/MacOS/$NAME"
+cp "$BIN/relayctl" "build/${SLUG}ctl"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

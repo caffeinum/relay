@@ -4,13 +4,13 @@ import Foundation
 /// config folder, keychain service and env prefix all follow it, and
 /// build.sh reads `name` out of this file.
 public enum Brand {
-    public static let name = "Chat"
+    public static let name = "Relay"
     public static let slug = name.lowercased()
     public static let bundleID = "com.caffeinum.\(slug)"
     public static let keychainService = slug
     public static let cli = "\(slug)ctl"
 
-    /// CHAT_HOME, CHAT_BENCH, CHAT_SCRIPT…
+    /// RELAY_HOME, RELAY_BENCH, RELAY_SCRIPT…
     public static func env(_ key: String) -> String? {
         ProcessInfo.processInfo.environment["\(slug.uppercased())_\(key)"]
     }

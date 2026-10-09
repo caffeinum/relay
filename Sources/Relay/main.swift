@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 // Plain AppKit start: no scene graph to build before the first frame. The
 // clock starts at the kernel's record of the process launch, not at main(),

@@ -1,7 +1,7 @@
 import AppKit
-import ChatCore
+import RelayCore
 
-/// A debugging hook for driving the app without hands: CHAT_SCRIPT holds
+/// A debugging hook for driving the app without hands: RELAY_SCRIPT holds
 /// steps separated by ";" — `wait 1.5`, `key j`, `key cmd-k`, `type eng`,
 /// `snap /tmp/a.png`, `quit`. Keys go through the same router a real key
 /// press does.

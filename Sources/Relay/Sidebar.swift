@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 /// Channels and DMs: Unread first, then the local sections from config,
 /// then everything else. Each conversation shows once.

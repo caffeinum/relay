@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 /// One window: sidebar, the channel, and a thread pane that opens on r.
 final class MainController: NSObject, NSWindowDelegate {

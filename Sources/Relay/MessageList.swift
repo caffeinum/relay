@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 /// Messages drawn as attributed text, heights measured up front so a
 /// channel's worth of rows lays out in one pass. Used for the channel and

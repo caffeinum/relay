@@ -1,5 +1,5 @@
 import Testing
-@testable import ChatCore
+@testable import RelayCore
 
 @Test func mentionsLinksAndEscapes() {
     let names = ["U1": "mira"]

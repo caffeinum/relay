@@ -1,5 +1,5 @@
 import AppKit
-import ChatCore
+import RelayCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var main: MainController!
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 print(String(format: "first_frame_ms=%.1f messages=%d conversations=%d  ", ms, main.list.messages.count, main.sidebar.conversations.count)
                       + Launch.marks.map { String(format: "%@=%.0f", $0.0, $0.1) }.joined(separator: " "))
                 fflush(stdout)
-                // Held open a moment so chatctl bench can see the window land.
+                // Held open a moment so relayctl bench can see the window land.
                 DispatchQueue.main.asyncAfter(deadline: .now() + (Brand.env("BENCH_HOLD") != nil ? 1.5 : 0)) { exit(0) }
             }
             buildMenu()

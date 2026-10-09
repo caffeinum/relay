@@ -8,8 +8,8 @@ cd "$(dirname "$0")"
 EMULATE_DIR="${EMULATE_DIR:-$HOME/.paw/repos/vercel-labs/emulate}"
 PORT="${PORT:-4003}"
 URL="http://localhost:$PORT"
-tmux kill-session -t chat-emulator 2>/dev/null || true
-tmux new-session -d -s chat-emulator "node '$EMULATE_DIR/packages/emulate/dist/index.js' start --service slack --port $PORT --seed '$PWD/emulate.yaml' 2>&1 | tee /tmp/chat-emulator.log"
+tmux kill-session -t relay-emulator 2>/dev/null || true
+tmux new-session -d -s relay-emulator "node '$EMULATE_DIR/packages/emulate/dist/index.js' start --service slack --port $PORT --seed '$PWD/emulate.yaml' 2>&1 | tee /tmp/relay-emulator.log"
 for _ in $(seq 50); do curl -sf -o /dev/null -X POST "$URL/api/auth.test" -H "Authorization: Bearer xoxp-emu-aleks" && break; sleep 0.2; done
 
 api() { # token method key=value...
@@ -39,4 +39,4 @@ DM=$(api aleks conversations.open users=$MIRA | python3 -c 'import sys,json;prin
 api mira chat.postMessage channel=$DM text="hey, got a minute for the deck?" >/dev/null
 api aleks chat.postMessage channel=$DM text="sure, after lunch" >/dev/null
 api mira chat.postMessage channel=$DM text="thanks! sending the draft now" >/dev/null
-echo "slack emulator on $URL (tmux: chat-emulator), seeded"
+echo "slack emulator on $URL (tmux: relay-emulator), seeded"

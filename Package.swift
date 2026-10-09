@@ -2,31 +2,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "Chat",
+    name: "Relay",
     platforms: [.macOS(.v14)],
     targets: [
         .target(
-            name: "ChatCore",
-            path: "Sources/ChatCore",
+            name: "RelayCore",
+            path: "Sources/RelayCore",
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .executableTarget(
-            name: "Chat",
-            dependencies: ["ChatCore"],
-            path: "Sources/Chat",
+            name: "Relay",
+            dependencies: ["RelayCore"],
+            path: "Sources/Relay",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "chatctl",
-            dependencies: ["ChatCore"],
-            path: "Sources/chatctl",
+            name: "relayctl",
+            dependencies: ["RelayCore"],
+            path: "Sources/relayctl",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "ChatCoreTests",
-            dependencies: ["ChatCore"],
-            path: "Tests/ChatCoreTests",
+            name: "RelayCoreTests",
+            dependencies: ["RelayCore"],
+            path: "Tests/RelayCoreTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

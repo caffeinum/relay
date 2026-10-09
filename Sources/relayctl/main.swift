@@ -1,6 +1,6 @@
 import Foundation
 import CoreGraphics
-import ChatCore
+import RelayCore
 
 // Raw access to the same objects the app uses, for agents and scripts.
 // Never prints tokens.
