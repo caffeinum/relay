@@ -29,6 +29,7 @@ enum Script {
         case "scroll": main.list.table.enclosingScrollView.map { s in s.contentView.scroll(to: NSPoint(x: 0, y: s.contentView.bounds.minY + (Double(arg) ?? 0))); s.reflectScrolledClipView(s.contentView) }
         case "load": if let c = main.current, let ms = try? main.store.messages(c.id, limit: Int(arg) ?? 2000) { main.list.show(ms, mode: .open(unreadAfter: nil, restore: nil)) }
         case "confirm": if let i = Int(arg).map({ $0 < 0 ? main.list.messages.count + $0 : $0 }), main.list.messages.indices.contains(i) { main.list.confirmDelete(ts: main.list.messages[i].ts) }
+        case "appearance": NSApp.appearance = NSAppearance(named: arg == "light" ? .aqua : .darkAqua)
         case "me": main.list.context.me = main.store.me; main.thread.context.me = main.store.me
         case "timing": print("script:", main.list.lastShowTiming)
         case "quit": NSApp.terminate(nil)
