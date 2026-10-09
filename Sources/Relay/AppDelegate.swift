@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + (Brand.env("BENCH_HOLD") != nil ? 1.5 : 0)) { exit(0) }
             }
             buildMenu()
+            main.composer.install()
             if Brand.env("OFFLINE") == nil { main.start() }
             Script.run(main)
         }

@@ -49,7 +49,7 @@ enum Script {
     private static func state(_ main: MainController, _ label: String) {
         let pal = (main.overlay as? Palette)?.itemTitles.prefix(12).joined(separator: " | ") ?? ""
         let msgs = main.list.messages.suffix(3).map { "\($0.author): \($0.text)\($0.edited ? " (edited)" : "")\($0.local.map { " [\($0.kind.rawValue) \($0.state.rawValue)]" } ?? "")\($0.reactions.isEmpty ? "" : " " + $0.reactions.map { ":\($0.name):\($0.count)" }.joined(separator: ","))" }
-        print("state \(label): current=\(main.current?.label ?? "-") thread=\(main.threadTS ?? "-") composer=\(main.composer.textView.mrkdwn.debugDescription) threadComposer=\(main.threadComposer.textView.mrkdwn.debugDescription) toast=\(main.toast.last ?? "-")")
+        print("state \(label): current=\(main.current?.label ?? "-") thread=\(main.threadTS ?? "-") composer=\(main.composer.mrkdwn.debugDescription) threadComposer=\(main.threadComposer.mrkdwn.debugDescription) toast=\(main.toast.last ?? "-")")
         print("  last: \(msgs.joined(separator: " || "))")
         if !main.thread.messages.isEmpty { print("  thread: \(main.thread.messages.map { "\($0.author): \($0.text)" }.joined(separator: " || "))") }
         if !pal.isEmpty { print("  palette: \(pal)") }

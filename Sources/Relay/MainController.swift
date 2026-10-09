@@ -481,8 +481,9 @@ final class MainController: NSObject, NSWindowDelegate {
         threadFocused = on && threadTS != nil
         thread.focused = threadFocused
         list.focused = !threadFocused
-        if window.isEditingText, !(window.firstResponder === composer.textView || window.firstResponder === threadComposer.textView) { return }
-        if window.firstResponder === composer.textView || window.firstResponder === threadComposer.textView { window.makeFirstResponder(nil) }
+        let r = window.firstResponder
+        if window.isEditingText, !(composer.owns(r) || threadComposer.owns(r)) { return }
+        if composer.owns(r) || threadComposer.owns(r) { window.makeFirstResponder(nil) }
     }
 
     var focusedList: MessageList { threadFocused ? thread : list }

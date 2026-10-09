@@ -6,7 +6,13 @@ import RelayCore
 /// edits my last message, esc leaves. The draft autosaves 300 ms after the
 /// last keystroke and whenever the key changes.
 final class Composer: NSView, NSTextViewDelegate {
-    let textView = ComposerTextView()
+    private var tv: ComposerTextView?
+    /// Built on first use: TextKit's first load costs ~12 ms, so the first
+    /// frame draws the empty box and its placeholder without it.
+    var textView: ComposerTextView { tv ?? install() }
+    var complete: ((Character, String) -> [Suggestion])? { didSet { tv?.complete = complete } }
+    weak var popupHost: NSView? { didSet { tv?.popupHost = popupHost } }
+    private var placeholderText = ""
     private let scroll = NSScrollView()
     private let toolbar = ComposerToolbar()
     private var height: NSLayoutConstraint!
@@ -33,10 +39,6 @@ final class Composer: NSView, NSTextViewDelegate {
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        scroll.documentView = textView
-        textView.delegate = self
-        textView.onCommandReturn = { [weak self] in self?.send() }
-        textView.onUndoEmpty = { [weak self] in self?.onUndoEmpty?() ?? false }
         addSubview(scroll)
         addSubview(toolbar)
         toolbar.onAction = { [weak self] a in self?.toolbarAction(a) }
@@ -46,15 +48,43 @@ final class Composer: NSView, NSTextViewDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override var wantsUpdateLayer: Bool { true }
-    override func updateLayer() {
-        layer?.backgroundColor = (Theme.isDark(self) ? Theme.bgHover : Theme.bg).cgColor
-        layer?.borderColor = (focused ? Theme.borderStrong : Theme.border).cgColor
+    @discardableResult
+    func install() -> ComposerTextView {
+        if let tv { return tv }
+        let t = ComposerTextView()
+        tv = t
+        scroll.documentView = t
+        t.delegate = self
+        t.placeholder = placeholderText
+        t.complete = complete
+        t.popupHost = popupHost
+        t.onCommandReturn = { [weak self] in self?.send() }
+        t.onUndoEmpty = { [weak self] in self?.onUndoEmpty?() ?? false }
+        needsLayout = true
+        needsDisplay = true
+        return t
     }
 
-    var focused: Bool { window?.firstResponder === textView }
-    var isEmpty: Bool { textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var placeholder: String { get { textView.placeholder } set { textView.placeholder = newValue } }
+    func owns(_ r: NSResponder?) -> Bool { tv != nil && r === tv }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard tv == nil, !placeholderText.isEmpty else { return }
+        NSAttributedString(string: placeholderText, attributes: [.font: Theme.Font.body, .foregroundColor: Theme.textMuted]).draw(at: NSPoint(x: 12, y: 11))
+    }
+
+    override var wantsUpdateLayer: Bool { false }
+    override func viewDidChangeEffectiveAppearance() { updateColors() }
+    private func updateColors() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = (Theme.isDark(self) ? Theme.bgHover : Theme.bg).cgColor
+            layer?.borderColor = (focused ? Theme.borderStrong : Theme.border).cgColor
+        }
+    }
+
+    var focused: Bool { owns(window?.firstResponder) }
+    private var text: String { tv?.string ?? "" }
+    var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var placeholder: String { get { placeholderText } set { placeholderText = newValue; tv?.placeholder = newValue; needsDisplay = true } }
 
     func focus() { window?.makeFirstResponder(textView) }
 
@@ -65,13 +95,14 @@ final class Composer: NSView, NSTextViewDelegate {
         if let d = draft {
             let (text, tokens) = decode(d.text)
             textView.load(text, tokens: tokens, selection: d.selection)
-        } else {
+        } else if !text.isEmpty {
             textView.load("", tokens: [])
         }
         relayout()
     }
 
-    var draft: Draft { Draft(channel: key.channel, threadTS: key.thread, text: textView.mrkdwn, selection: textView.selectedRange()) }
+    var draft: Draft { Draft(channel: key.channel, threadTS: key.thread, text: tv?.mrkdwn ?? "", selection: tv?.selectedRange() ?? NSRange()) }
+    var mrkdwn: String { tv?.mrkdwn ?? "" }
 
     /// A pending debounced save goes out now.
     func flushDraft() {
@@ -86,7 +117,7 @@ final class Composer: NSView, NSTextViewDelegate {
     func clear() {
         saveWork?.cancel()
         saveWork = nil
-        textView.load("", tokens: [])
+        tv?.load("", tokens: [])
         relayout()
     }
 
@@ -154,13 +185,15 @@ final class Composer: NSView, NSTextViewDelegate {
         relayout()
     }
 
-    private var showsToolbar: Bool { readOnly || focused || !textView.string.isEmpty }
+    private var showsToolbar: Bool { readOnly || focused || !text.isEmpty }
 
     func relayout() {
         needsDisplay = true
         needsLayout = true
         let textH: CGFloat
-        if let lm = textView.layoutManager, let tc = textView.textContainer {
+        if text.isEmpty {
+            textH = Body.lineHeight
+        } else if let lm = tv?.layoutManager, let tc = tv?.textContainer {
             tc.size = NSSize(width: max(40, bounds.width - 24), height: .greatestFiniteMagnitude)
             lm.ensureLayout(for: tc)
             textH = max(Body.lineHeight, ceil(lm.usedRect(for: tc).height))
@@ -172,14 +205,14 @@ final class Composer: NSView, NSTextViewDelegate {
         if height.constant != h { height.constant = h }
         toolbar.isHidden = !showsToolbar
         toolbar.hasText = !isEmpty
-        updateLayer()
+        updateColors()
     }
 
     override func layout() {
         super.layout()
         let tb = showsToolbar ? Self.toolbarHeight : 0
         scroll.frame = NSRect(x: 12, y: 11, width: bounds.width - 24, height: bounds.height - 22 - tb)
-        textView.frame.size.width = scroll.contentSize.width
+        tv?.frame.size.width = scroll.contentSize.width
         toolbar.frame = NSRect(x: 6, y: bounds.height - tb, width: bounds.width - 12, height: tb)
     }
 

@@ -30,8 +30,8 @@ extension MainController {
 
     func configure(_ c: Composer, inThread: Bool) {
         c.readOnly = !writes
-        c.textView.complete = { [weak self] sigil, q in self?.suggestions(sigil, q) ?? [] }
-        c.textView.popupHost = root
+        c.complete = { [weak self] sigil, q in self?.suggestions(sigil, q) ?? [] }
+        c.popupHost = root
         c.onSend = { [weak self, weak c] text in if let c { self?.send(text, from: c) } }
         c.onSaveDraft = { [weak self] d in self?.saveDraft(d) }
         c.onEditLast = { [weak self] in self?.editLast(inThread: inThread) }
