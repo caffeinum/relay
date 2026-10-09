@@ -108,7 +108,9 @@ final class HoverBar: NSView, NSViewToolTipOwner {
             case .save: Symbols.draw("bookmark", 14, color: color, in: b.rect)
             case .edit: Symbols.draw("pencil", 14, color: color, in: b.rect)
             case .delete: Symbols.draw("trash", 14, color: color, in: b.rect)
-            case .more: Symbols.draw("ellipsis", 14, .bold, color: color, in: b.rect)
+            case .more:
+                color.setFill()
+                for dy in [-5.0, 0, 5] { NSBezierPath(ovalIn: NSRect(x: b.rect.midX - 1.6, y: b.rect.midY + dy - 1.6, width: 3.2, height: 3.2)).fill() }
             }
         }
     }

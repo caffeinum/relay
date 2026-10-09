@@ -89,7 +89,7 @@ final class BodyView: NSView {
         let rect = manager.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: container)
         guard rect.insetBy(dx: -2, dy: -2).contains(p) else { return nil }
         let c = manager.characterIndexForGlyph(at: g)
-        guard c < storage.length, let url = storage.attribute(.link, at: c, effectiveRange: nil) as? URL else { return nil }
+        guard c < storage.length, let url = storage.attribute(.relayLink, at: c, effectiveRange: nil) as? URL else { return nil }
         return (url, rect)
     }
 
@@ -101,7 +101,7 @@ final class BodyView: NSView {
 
     override func resetCursorRects() {
         guard storage.length > 0 else { return }
-        storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { v, range, _ in
+        storage.enumerateAttribute(.relayLink, in: NSRange(location: 0, length: storage.length)) { v, range, _ in
             guard v != nil else { return }
             let gr = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             manager.enumerateEnclosingRects(forGlyphRange: gr, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: container) { r, _ in

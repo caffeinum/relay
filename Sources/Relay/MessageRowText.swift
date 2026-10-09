@@ -6,6 +6,8 @@ extension NSAttributedString.Key {
     static let relayChip = NSAttributedString.Key("relayChip")
     /// A block decoration: the code block card or the quote bar.
     static let relayBlock = NSAttributedString.Key("relayBlock")
+    /// A click target. Not `.link`: TextKit would underline it and paint it system blue.
+    static let relayLink = NSAttributedString.Key("relayLink")
 }
 
 enum Chip: Int { case code, mention, mentionMe, link }
@@ -130,7 +132,7 @@ struct Body {
                     }
                     if me { mentionsMe = true }
                     var a: [NSAttributedString.Key: Any] = [.font: Theme.Font.bodyMedium, .foregroundColor: me ? Theme.mentionMeFg : Theme.mentionFg, .paragraphStyle: p]
-                    if let u = URL(string: url) { a[.link] = u }
+                    if let u = URL(string: url) { a[.relayLink] = u }
                     chip(label, a, me ? .mentionMe : .mention)
                 case .link(let label, let raw):
                     guard let url = URL(string: raw) else {
@@ -141,17 +143,17 @@ struct Body {
                     if let label {
                         var a = attrs(s, p)
                         a[.foregroundColor] = Theme.link
-                        a[.link] = url
+                        a[.relayLink] = url
                         out.append(NSAttributedString(string: label, attributes: a))
                     } else {
                         var a = attrs(s, p)
                         a[.foregroundColor] = Theme.link
-                        a[.link] = url
+                        a[.relayLink] = url
                         // The icon is drawn by BodyLayoutManager into the kern of a leading hair space,
                         // so the line stays measurable without an attachment.
                         let start = out.length
                         chip("\u{200A}" + short(raw), a, .link)
-                        out.addAttribute(.kern, value: 14, range: NSRange(location: start, length: 1))
+                        out.addAttribute(.kern, value: 17, range: NSRange(location: start, length: 1))
                     }
                 }
             }
@@ -270,7 +272,7 @@ final class BodyLayoutManager: NSLayoutManager {
                     Theme.linkChipBg.setFill(); path.fill()
                     if first {
                         let icon = Body.linkIcon
-                        icon.draw(in: NSRect(x: r.minX + 3, y: r.midY - 6, width: 12, height: 12), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                        icon.draw(in: NSRect(x: r.minX + 4, y: r.midY - 6, width: 12, height: 12), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
                     }
                 }
             }

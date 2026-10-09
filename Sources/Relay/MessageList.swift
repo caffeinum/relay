@@ -364,14 +364,18 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             case .special(let s): return s
             }
         }.text
+        stillCursor?.cancel()
+        hoveredRow = nil
+        hoverBar.isHidden = true
         editingTS = ts
         editor.begin(m, text: text)
         editorHeight = editor.height(width: entries[i].geo?.contentWidth ?? 300)
         table.noteHeightOfRows(withIndexesChanged: [r])
         table.reloadData(forRowIndexes: [r], columnIndexes: [0])
+        markEditing(r, true)
+        table.scrollRowToVisible(r)
         placeEditor()
         editor.focus()
-        hoveredRow = nil
         return true
     }
 
@@ -380,10 +384,17 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         editingTS = nil
         editor.end()
         if let i = indexOfTS[ts] {
+            markEditing(rowOf[i], false)
             table.noteHeightOfRows(withIndexesChanged: [rowOf[i]])
             table.reloadData(forRowIndexes: [rowOf[i]], columnIndexes: [0])
         }
         if window?.firstResponder === editor.textView { window?.makeFirstResponder(nil) }
+    }
+
+    private func markEditing(_ r: Int, _ on: Bool) {
+        guard let v = table.rowView(atRow: r, makeIfNecessary: false) as? MessageRowView else { return }
+        v.editing = on
+        if case .message(let i, _) = items[r] { v.mentionsMe = !on && mentionsMe(entries[i]) }
     }
 
     /// The inline strip on that row's bar: ↩/y deletes, esc/n cancels (`handleConfirmKey`).
@@ -392,8 +403,10 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         confirmingTS = ts
         let r = rowOf[i]
         table.scrollRowToVisible(r)
+        stillCursor?.cancel()
         let w = hoverBar.beginConfirm()
         placeBar(row: r, width: w)
+        hoverBar.isHidden = false
     }
 
     /// For the key router while the delete strip is up.
@@ -614,7 +627,9 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             e.bodyHeight = (cw, m.height(e.body.text, width: cw))
             e.geo = geometry(e, width: w)
         }
-        table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: visible.location..<(visible.location + visible.length)))
+        let shown = IndexSet(integersIn: visible.location..<(visible.location + visible.length))
+        table.noteHeightOfRows(withIndexesChanged: shown)
+        table.reloadData(forRowIndexes: shown, columnIndexes: [0])
         deferredRelayout?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.width == w else { return }
@@ -622,6 +637,8 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             let atBottom = self.isAtBottom
             self.layoutAll(width: w)
             self.table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<self.items.count))
+            let v = self.table.rows(in: self.table.visibleRect)
+            self.table.reloadData(forRowIndexes: IndexSet(integersIn: v.location..<(v.location + v.length)), columnIndexes: [0])
             if atBottom { self.scrollToBottom() } else if let anchor { self.restore(anchor) }
             self.updateOverlays()
         }
