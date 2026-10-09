@@ -1,0 +1,30 @@
+slack:
+  team:
+    name: 2027dev (emulated)
+    domain: dev2027
+  users:
+    - name: aleks
+      real_name: Aleks
+      email: aleks@example.com
+      is_admin: true
+    - name: mira
+      real_name: Mira Chen
+      email: mira@example.com
+    - name: tomas
+      real_name: Tomás Ruiz
+      email: tomas@example.com
+  channels:
+    - name: general
+      topic: Company-wide
+    - name: engineering
+      topic: Builds and bugs
+    - name: customers
+      topic: Customer threads
+    - name: random
+  tokens:
+    - token: xoxp-emu-aleks
+      user: aleks
+    - token: xoxp-emu-mira
+      user: mira
+    - token: xoxp-emu-tomas
+      user: tomas
