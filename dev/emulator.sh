@@ -40,3 +40,4 @@ api mira chat.postMessage channel=$DM text="hey, got a minute for the deck?" >/d
 api aleks chat.postMessage channel=$DM text="sure, after lunch" >/dev/null
 api mira chat.postMessage channel=$DM text="thanks! sending the draft now" >/dev/null
 echo "slack emulator on $URL (tmux: relay-emulator-$PORT), seeded"
+if [ -n "${SEED_RICH:-}" ]; then PORT=$PORT ./seed-render.sh; fi

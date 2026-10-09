@@ -23,6 +23,13 @@ enum Script {
         case "key": press(arg, main.window)
         case "type": type(arg, main.window)
         case "snap": snap(main.window, to: arg)
+        case "hover": main.list.hover(message: Int(arg).map { $0 < 0 ? main.list.messages.count + $0 : $0 })
+        case "edit": if let i = Int(arg).map({ $0 < 0 ? main.list.messages.count + $0 : $0 }), main.list.messages.indices.contains(i) { print("script: edit", main.list.beginEdit(ts: main.list.messages[i].ts)) }
+        case "unread": main.list.show(main.list.messages, mode: .open(unreadAfter: arg.isEmpty ? main.current?.lastRead : arg, restore: nil))
+        case "scroll": main.list.table.enclosingScrollView.map { s in s.contentView.scroll(to: NSPoint(x: 0, y: s.contentView.bounds.minY + (Double(arg) ?? 0))); s.reflectScrolledClipView(s.contentView) }
+        case "load": if let c = main.current, let ms = try? main.store.messages(c.id, limit: Int(arg) ?? 2000) { main.list.show(ms, mode: .open(unreadAfter: nil, restore: nil)) }
+        case "me": main.list.context.me = main.store.me; main.thread.context.me = main.store.me
+        case "timing": print("script:", main.list.lastShowTiming)
         case "quit": NSApp.terminate(nil)
         default: print("script: unknown step \(step)")
         }
