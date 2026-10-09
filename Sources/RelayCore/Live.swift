@@ -247,6 +247,7 @@ public final class Live {
         } catch { fail(error); return }
         switch o["type"] as? String {
         case "hello":
+            log("socket mode: connected")
             backoff = 1
             status(.live)
             if connectedOnce { catchUp(gap: droppedAt.map { Date().timeIntervalSince($0) } ?? 0) }

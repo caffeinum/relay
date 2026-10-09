@@ -32,6 +32,15 @@ slack:
     - name: customers
       topic: Customer threads
     - name: random
+  usergroups:
+    - handle: design-team
+      name: Design team
+      users: [mira, aleks]
+    - handle: backend
+      name: Backend
+      users: [tomas]
+  emoji:
+    shipit: https://emoji.slack-edge.com/T0/shipit/shipit.png
   # A bot that posts: its user is U0DEPLOY01 and its messages carry bot_id B0DEPLOY01.
   oauth_apps:
     - client_id: deploybot-client
@@ -41,6 +50,15 @@ slack:
       bot_id: B0DEPLOY01
       bot_user_id: U0DEPLOY01
       bot_name: deploybot
+    # The internal app itself: Socket Mode connects with its xapp token.
+    - client_id: relay-client
+      client_secret: relay-secret
+      name: Relay
+      redirect_uris: []
+      app_id: A0RELAY
+      bot_id: B0RELAY
+      bot_user_id: U0RELAYBOT
+      bot_name: relay
   tokens:
     - token: xoxp-emu-aleks
       user: aleks
@@ -52,3 +70,6 @@ slack:
       type: bot
       user_id: U0DEPLOY01
       bot_id: B0DEPLOY01
+    - token: xapp-emu-relay
+      type: app
+      app_id: A0RELAY

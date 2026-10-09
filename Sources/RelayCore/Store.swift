@@ -520,7 +520,7 @@ public final class Store {
         return Message(
             id: r.int64(0), channel: r.text(1), ts: r.text(2), threadTS: r.string(3), user: user, author: author, text: text,
             subtype: r.string(6), replyCount: r.int(7), latestReply: r.string(8), reactions: decode(10, [SlackReaction].self) ?? [],
-            editedTS: r.string(9), botID: botID, isBot: botID != nil || person?.isBot == true,
+            editedTS: r.string(9), botID: botID, isBot: person?.isBot ?? (botID != nil),
             avatar: person?.image48 ?? bot?.image48, isMine: !ctx.me.isEmpty && user == ctx.me,
             mentionsMe: user != ctx.me && ctx.mentionsMe(text),
             replyUsers: Array((decode(14, [String].self) ?? []).prefix(3)),

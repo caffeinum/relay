@@ -76,7 +76,7 @@ public struct Config: Codable, Equatable {
         workspace: "emulator",
         workspaces: [
             "2027dev": Workspace(api: "https://slack.com/api"),
-            "emulator": Workspace(api: "http://localhost:4003/api", token: "xoxp-emu-aleks", writes: true),
+            "emulator": Workspace(api: "http://localhost:4003/api", token: "xoxp-emu-aleks", writes: true, appToken: "xapp-emu-relay"),
         ],
         sections: [Section(name: "Customers", channels: ["customers"])])
 

@@ -265,7 +265,8 @@ extension MainController {
         let items = drafts.map { d -> Palette.Item in
             let label = convs[d.channel]?.label ?? d.channel
             return Palette.Item(icon: .symbol("pencil"), title: d.threadTS == nil ? label : "Thread in \(label)",
-                                detail: Mrkdwn.plain(d.text, names: store.name(of:), channels: { convs[$0]?.name }).replacingOccurrences(of: "\n", with: " "),
+                                detail: Mrkdwn.plain(d.text, names: store.name(of:), channels: { convs[$0]?.name },
+                                                    groups: { [list] in list.context.groupHandle($0) }).replacingOccurrences(of: "\n", with: " "),
                                 run: { [weak self] in self?.openDraft(d) })
         }
         var s = Palette.Section(title: "Drafts", prefix: nil, items: items, emptyQuery: items, cap: 50)
@@ -377,7 +378,7 @@ extension MainController {
                 cmds.append(Palette.Item(icon: .symbol("folder"), title: "Move \(c.label) back to \(c.isDM ? "Direct messages" : "Channels")", run: { [weak self] in self?.moveCurrent(to: nil) }))
             }
             cmds.append(Palette.Item(icon: .symbol("info.circle"), title: "Channel details: \(c.label)",
-                                     detail: [c.topic, "\((cached({ try store.members(c.id) }) ?? []).count) members"].compactMap { $0 }.joined(separator: " · "),
+                                     detail: [c.topic, (cached({ try store.members(c.id) }) ?? []).count.counted("member")].compactMap { $0 }.joined(separator: " · "),
                                      run: { [weak self] in self?.run(.copyChannelLink) }))
         }
         for s in sections {

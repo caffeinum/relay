@@ -41,7 +41,7 @@ public struct MentionSearch {
                              kind: p.isBot ? .bot : .person, avatar: p.image48, keys: [p.displayName, p.realName, p.handle])
         }
         out += groups.map { g in
-            MentionCandidate(target: .group(g.id), label: g.handle, detail: "\(g.name) · \(g.users.count) members", kind: .group, keys: [g.handle, g.name])
+            MentionCandidate(target: .group(g.id), label: g.handle, detail: "\(g.name) · \(g.users.count.counted("member"))", kind: .group, keys: [g.handle, g.name])
         }
         out += [("here", "Notify everyone online"), ("channel", "Notify everyone in this channel"), ("everyone", "Notify the whole workspace")].map {
             MentionCandidate(target: .special($0.0), label: $0.0, detail: $0.1, kind: .special, keys: [$0.0])
@@ -86,4 +86,9 @@ public struct MentionSearch {
         scored.sort { a, b in a.0 != b.0 ? a.0 < b.0 : a.1 != b.1 ? a.1 < b.1 : a.2 != b.2 ? a.2 < b.2 : a.3 < b.3 }
         return scored.prefix(limit).map { all[$0.3] }
     }
+}
+
+extension Int {
+    /// "1 member", "3 members".
+    public func counted(_ noun: String) -> String { "\(self) \(noun)\(self == 1 ? "" : "s")" }
 }

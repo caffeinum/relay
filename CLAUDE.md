@@ -40,4 +40,8 @@ The approved plan is in README.md.
 - Live: after a reconnect it re-fetches the watched channel/thread (and runs `sync.all` after a gap > 60 s); a 30 s ping catches half-open sockets; transport errors are logged as domain/code/message only (the wss URL carries a ticket).
 - ⌘K toggles `toggleSeconds` / `undoWindow` write config.json via `Config.update` (re-read, change, atomic write). Compact mode isn't built yet.
 - Script: `key <name>` with an unknown name prints and does nothing; `focuswin` makes read-on-view (U3) fire in headless runs.
+- Sync: a conversation Slack lists but won't serve (`conversations.info` channel_not_found; the Slackbot DM on 2027dev) is hidden (`present=0`) and logged; any other per-conversation failure lets the rest finish and then throws `SyncError.partial`.
+- A message is from a bot only when its author is a bot user, or it has no known author and a bot_id. Posts made through Relay carry the app's bot_id and still show as the person.
+- The emulator seed (dev/emulate.yaml) includes the internal app (`xapp-emu-relay`, app A0RELAY) so Socket Mode connects locally, two user groups (@design-team, @backend) and a custom emoji. "socket mode: connected" in the log marks a live socket.
+- test.sh points RELAY_HOME at a temp dir so tests never log into the real support folder.
 - Emulator gaps: `conversations.history` ignores `latest` (scrollback over the network re-fetches the newest page) and omits `latest_reply` (the store falls back to the newest cached reply).

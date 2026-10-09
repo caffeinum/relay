@@ -192,3 +192,11 @@ import Testing
     #expect(try s.members("C1") == ["UME", "U2"])
     #expect(try s.membersFetched("C1") != nil)
 }
+
+@Test func aPersonPostingThroughAnAppIsNotABot() throws {
+    let s = try seeded()
+    var m = SlackMessage(ts: "300.000000", user: "UME", text: "sent from relay")
+    m.bot_id = "BAPP"
+    try s.put(messages: [m], channel: "C1")
+    #expect(try s.message("C1", ts: "300.000000")?.isBot == false)
+}
