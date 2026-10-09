@@ -5,7 +5,7 @@ import Testing
 /// The one place tests build a Message, so a model change is a one-line fix.
 func msg(_ ts: Double, _ user: String, _ text: String = "hi", subtype: String? = nil, replies: Int = 0, thread: String? = nil) -> Message {
     Message(id: 0, channel: "C1", ts: String(format: "%.6f", ts), threadTS: thread, user: user, author: user, text: text,
-            subtype: subtype, replyCount: replies, latestReply: nil, edited: false, reactions: [])
+            subtype: subtype, replyCount: replies, latestReply: nil, reactions: [])
 }
 
 private let cal: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c }()
