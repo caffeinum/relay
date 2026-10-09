@@ -67,12 +67,14 @@ func live() async throws {
     let config = try Config.load()
     let (name, w) = try config.current(workspace)
     let (store, sync) = try open()
+    setvbuf(stdout, nil, _IOLBF, 0)
     let token = Config.appToken(name, w)
     print("app token: \(token == nil ? "none" : "present")")
     let live = Live(store: store, sync: sync, appToken: token)
     live.onStatus = { print("status: \($0)") }
     live.onEvent = { kind, channels in print("event: \(kind) \(channels.sorted().joined(separator: ","))") }
     live.onError = { print("error: \($0)") }
+    live.onChange = { print("changed: \($0.sorted().joined(separator: ","))") }
     if let c = option("--watch") { live.watch(channel: try resolve(c, store).id, thread: nil) }
     live.start()
     while true { try await Task.sleep(nanoseconds: 1_000_000_000) }
