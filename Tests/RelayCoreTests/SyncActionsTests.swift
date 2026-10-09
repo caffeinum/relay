@@ -147,3 +147,46 @@ import Testing
     await sync.resolve(ms, channel: "C1")
     #expect(fake.calls.count == 3)
 }
+
+@Test func unreachableConversationIsHiddenAndTheRestSync() async throws {
+    let fake = FakeSlack { c in
+        switch c.method {
+        case "auth.test": return ["user_id": "UME", "team_id": "T1"]
+        case "users.list": return ["members": []]
+        case "users.conversations": return ["channels": [
+            ["id": "C1", "name": "general", "is_channel": true],
+            ["id": "D9", "is_im": true, "user": "USLACKBOT"],
+        ]]
+        case "conversations.info" where c.params["channel"] == "D9": return ["ok": false, "error": "channel_not_found"]
+        case "conversations.info": return ["channel": ["id": "C1", "name": "general", "is_channel": true, "last_read": "100.000000"]]
+        case "conversations.history": return ["messages": [["ts": "101.000000", "user": "UME", "text": "hi"]]]
+        default: return [:]
+        }
+    }
+    let s = try makeStore()
+    try await Sync(store: s, slack: fake.client(writes: false)).all()
+    #expect(try s.conversations().map(\.id) == ["C1"])
+    #expect(try s.message("C1", ts: "101.000000")?.text == "hi")
+    #expect(s.get("synced_at") != nil)
+}
+
+@Test func otherConversationFailuresSurfaceAfterTheRestSync() async throws {
+    let fake = FakeSlack { c in
+        switch c.method {
+        case "auth.test": return ["user_id": "UME", "team_id": "T1"]
+        case "users.list": return ["members": []]
+        case "users.conversations": return ["channels": [
+            ["id": "C1", "name": "general", "is_channel": true],
+            ["id": "C2", "name": "broken", "is_channel": true],
+        ]]
+        case "conversations.info" where c.params["channel"] == "C2": return ["ok": false, "error": "internal_error"]
+        case "conversations.info": return ["channel": ["id": "C1", "name": "general", "is_channel": true]]
+        case "conversations.history": return ["messages": [["ts": "101.000000", "user": "UME", "text": "hi"]]]
+        default: return [:]
+        }
+    }
+    let s = try makeStore()
+    await #expect(throws: SyncError.self) { try await Sync(store: s, slack: fake.client(writes: false)).all() }
+    #expect(try s.message("C1", ts: "101.000000")?.text == "hi")
+    #expect(try s.conversations().count == 2)
+}

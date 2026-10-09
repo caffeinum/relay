@@ -200,6 +200,12 @@ public final class Store {
         }
     }
 
+    /// Slack listed it but won't serve it to this token (the Slackbot DM does
+    /// this): stop showing it until a later list brings it back.
+    public func hide(conversation id: String) throws {
+        try db.run("UPDATE convs SET present=0 WHERE id=?", id)
+    }
+
     /// One conversation, without touching the others (conversations.open).
     public func upsert(conversation c: SlackConversation) throws {
         try db.transaction { try upsert(c) }

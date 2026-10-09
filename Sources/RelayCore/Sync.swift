@@ -3,8 +3,12 @@ import Foundation
 public enum SyncError: Error, CustomStringConvertible {
     case notSignedIn
     case notCached(channel: String, ts: String)
+    case partial([(id: String, error: String)], of: Int)
     public var description: String {
         switch self {
+        case .partial(let failed, let total):
+            let list = failed.prefix(5).map { "\($0.id): \($0.error)" }.joined(separator: ", ")
+            return "\(failed.count) of \(total) conversations failed to sync (\(list)\(failed.count > 5 ? ", …" : ""))"
         case .notSignedIn: return "the cache doesn't know who I am yet; sync first"
         case .notCached(let c, let ts): return "message \(c)/\(ts) is not in the cache"
         }
@@ -71,24 +75,38 @@ public final class Sync {
         var order = convs.map(\.id)
         if let first, let i = order.firstIndex(of: first) { order.remove(at: i); order.insert(first, at: 0) }
         var done = 0
-        try await withThrowingTaskGroup(of: String.self) { group in
+        var failed: [(String, Error)] = []
+        await withTaskGroup(of: (String, Error?).self) { group in
             var next = order.makeIterator()
-            func add() { if let id = next.next() { group.addTask { try await self.conversation(id); return id } } }
+            func add() {
+                guard let id = next.next() else { return }
+                group.addTask {
+                    do { try await self.conversation(id); return (id, nil) } catch { return (id, error) }
+                }
+            }
             for _ in 0..<width { add() }
-            while let id = try await group.next() {
+            while let (id, error) = await group.next() {
                 done += 1
+                if let error { failed.append((id, error)) } else { changed([id]) }
                 progress("Syncing \(done)/\(order.count)…")
-                changed([id])
                 add()
             }
         }
-        try store.setValue("synced_at", String(Int(Date().timeIntervalSince1970)))
         progress(nil)
+        if failed.count == order.count, let (_, error) = failed.first { throw error }
+        try store.setValue("synced_at", String(Int(Date().timeIntervalSince1970)))
+        if !failed.isEmpty { throw SyncError.partial(failed.map { ($0.0, String(describing: $0.1)) }, of: order.count) }
     }
 
     /// The read cursor and anything newer than what's cached.
     public func conversation(_ id: String) async throws {
-        let info = try await slack.info(id)
+        let info: SlackConversation
+        do { info = try await slack.info(id) } catch SlackError.api(_, "channel_not_found", _) {
+            log("conversations.info \(id): channel_not_found, hiding it")
+            try store.hide(conversation: id)
+            changed([])
+            return
+        }
         if let lr = info.last_read { try store.setLastRead(id, lr) }
         try await newer(id)
     }
@@ -251,3 +269,4 @@ final class MarkThrottle {
         }
     }
 }
+
