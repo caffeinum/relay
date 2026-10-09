@@ -79,11 +79,8 @@ private func p(_ xs: I...) -> Mrkdwn.Block { .paragraph(xs) }
 @Test func twentyKilobytesUnderFiveMs() {
     let chunk = "*bold* _it_ `code` <@U1> <https://a.b|l> :+1: snake_case &amp; ~s~ *open _x\n&gt; quote\n• item\n```\ncode\n```\n"
     let s = String(repeating: chunk, count: 20_000 / chunk.utf8.count + 1)
-    _ = Mrkdwn.parse(s)
-    let t = Date()
-    let blocks = Mrkdwn.parse(s)
-    let ms = Date().timeIntervalSince(t) * 1000
-    #expect(!blocks.isEmpty)
+    #expect(!Mrkdwn.parse(s).isEmpty)
+    let ms = fastest(10) { _ = Mrkdwn.parse(s) } * 1000
     #if DEBUG
     let budget = 25.0   // -Onone runs the scalar loop ~5x slower; the 5 ms target is for the shipped build
     #else
@@ -92,9 +89,14 @@ private func p(_ xs: I...) -> Mrkdwn.Block { .paragraph(xs) }
     #expect(ms < budget, "parse took \(ms)ms")
 }
 
+/// Quadratic scanning would make 8x the input cost ~64x; linear stays near 8x.
 @Test func pathologicalInputIsLinear() {
-    let s = String(repeating: "*a _b ~c `d <e ", count: 2000)
-    let t = Date()
-    _ = Mrkdwn.parse(s)
-    #expect(Date().timeIntervalSince(t) < 0.05)
+    let small = String(repeating: "*a _b ~c `d <e ", count: 500), big = String(repeating: "*a _b ~c `d <e ", count: 4000)
+    let ratio = fastest(5) { _ = Mrkdwn.parse(big) } / fastest(5) { _ = Mrkdwn.parse(small) }
+    #expect(ratio < 20, "8x input took \(ratio)x the time")
+}
+
+/// The best of n runs: wall-clock noise from a busy machine only ever adds time.
+func fastest(_ n: Int, _ f: () -> Void) -> Double {
+    (0..<n).map { _ in let t = Date(); f(); return Date().timeIntervalSince(t) }.min()!
 }

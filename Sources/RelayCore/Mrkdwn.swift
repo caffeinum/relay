@@ -202,10 +202,14 @@ public enum Mrkdwn {
     /// `<…>` tokens and `code` spans are stepped over whole.
     private static func closer(_ u: [Unicode.Scalar], _ c: Unicode.Scalar, _ from: Int, _ hi: Int) -> Int? {
         var j = from + 1
+        var tickOpen = true
         while j < hi {
             let x = u[j]
             if x == "<", let k = find(u, ">", j + 1, hi, stopAt: "<") { j = k + 1; continue }
-            if x == "`", let k = find(u, "`", j + 1, hi, stopAt: nil) { j = k + 1; continue }
+            if x == "`", tickOpen {
+                if let k = find(u, "`", j + 1, hi, stopAt: nil) { j = k + 1; continue }
+                tickOpen = false
+            }
             if x == c, !isSpace(u[j - 1]), j + 1 == hi || !isWord(u[j + 1]) { return j }
             j += 1
         }
