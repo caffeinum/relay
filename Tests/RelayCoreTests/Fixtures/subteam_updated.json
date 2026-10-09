@@ -1,0 +1,37 @@
+{
+  "envelope_id": "0b1c2d3e-0013-4e5f-9a8b-7c6d5e4f3a2b",
+  "type": "events_api",
+  "accepts_response_payload": false,
+  "retry_attempt": 0,
+  "retry_reason": "",
+  "payload": {
+    "token": "redacted",
+    "team_id": "T0EMU",
+    "api_app_id": "A0RELAY",
+    "event": {
+      "type": "subteam_updated",
+      "event_ts": "162.000000",
+      "subteam": {
+        "id": "S1",
+        "team_id": "T0EMU",
+        "handle": "eng",
+        "name": "Engineering",
+        "users": [
+          "UME",
+          "U2"
+        ],
+        "date_delete": 0
+      }
+    },
+    "type": "event_callback",
+    "event_id": "Ev00000013",
+    "event_time": 1728412400,
+    "authorizations": [
+      {
+        "team_id": "T0EMU",
+        "user_id": "UME",
+        "is_bot": false
+      }
+    ]
+  }
+}

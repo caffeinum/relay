@@ -1,0 +1,40 @@
+{
+  "envelope_id": "0b1c2d3e-0011-4e5f-9a8b-7c6d5e4f3a2b",
+  "type": "events_api",
+  "accepts_response_payload": false,
+  "retry_attempt": 0,
+  "retry_reason": "",
+  "payload": {
+    "token": "redacted",
+    "team_id": "T0EMU",
+    "api_app_id": "A0RELAY",
+    "event": {
+      "type": "user_change",
+      "event_ts": "160.000000",
+      "user": {
+        "id": "U2",
+        "name": "mira",
+        "real_name": "Mira Chen",
+        "deleted": false,
+        "is_bot": false,
+        "tz": "Europe/Berlin",
+        "profile": {
+          "display_name": "mira.c",
+          "real_name": "Mira Chen",
+          "image_48": "https://img/m2.png",
+          "title": "Design"
+        }
+      }
+    },
+    "type": "event_callback",
+    "event_id": "Ev00000011",
+    "event_time": 1728412400,
+    "authorizations": [
+      {
+        "team_id": "T0EMU",
+        "user_id": "UME",
+        "is_bot": false
+      }
+    ]
+  }
+}
