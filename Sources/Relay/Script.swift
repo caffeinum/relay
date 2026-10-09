@@ -72,10 +72,16 @@ enum Script {
         if Launch.headless { window.sendEvent(e) } else { NSApp.sendEvent(e) }
     }
 
-    /// Into whatever has focus: a search or palette field.
+    /// Key presses, one per character, into whatever has focus: the same
+    /// path real typing takes (key router, then the text view).
     private static func type(_ s: String, _ window: NSWindow) {
-        guard let editor = window.firstResponder as? NSTextView else { return }
-        editor.insertText(s, replacementRange: editor.selectedRange())
+        for ch in s {
+            let c = String(ch)
+            guard let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: window.windowNumber, context: nil, characters: c,
+                                           charactersIgnoringModifiers: c, isARepeat: false, keyCode: c == " " ? 49 : 0) else { continue }
+            window.sendEvent(e)
+        }
     }
 
     private static func snap(_ window: NSWindow, to path: String) {

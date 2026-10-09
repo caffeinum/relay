@@ -22,7 +22,8 @@ extension MainController {
         }
         if !editing, Commands.startsSequence(name) { pendingKey = name; return true }
         guard let c = Commands.command(for: name) else { return false }
-        if editing && c.scope != .global { return false }
+        let chord = f.contains(.command) || f.contains(.control)
+        if editing && (c.scope != .global || !chord) { return false }
         if c.scope == .message, focusedList.selectedMessage == nil { return false }
         run(c.id)
         return true

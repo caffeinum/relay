@@ -187,11 +187,6 @@ public final class Store {
         do { return try value(key) } catch { log("kv get \(key): \(error)"); return nil }
     }
 
-    /// Compatibility until SHELL moves to `setUI`: failures are logged.
-    public func set(_ key: String, _ value: String) {
-        do { try setValue(key, value) } catch { log("kv set \(key): \(error)") }
-    }
-
     public var me: String? { self.get("me") }
 
     // MARK: conversations

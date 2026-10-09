@@ -195,7 +195,11 @@ public final class Outbox {
             var m = posted.message ?? SlackMessage(ts: posted.ts, user: store.me, text: text, thread_ts: item.threadTS)
             if m.thread_ts == nil { m.thread_ts = item.threadTS }
             try db.transaction {
+                let fresh = try !store.exists(channel: item.channel, ts: posted.ts)
                 try store.put(messages: [m], channel: item.channel, resolvingEchoes: false)
+                if fresh, let parent = item.threadTS, parent != posted.ts {
+                    try store.noteReply(channel: item.channel, parent: parent, ts: posted.ts, user: store.me ?? "")
+                }
                 try db.run("UPDATE outbox SET state='sent', sent_ts=? WHERE id=?", posted.ts, item.id)
             }
         case .edit:

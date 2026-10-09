@@ -18,7 +18,7 @@ private func conv(_ id: String, _ name: String, lastRead: String = "0") -> Slack
 
 @Test func unreadCountsSkipMineRepliesAndSeen() throws {
     let s = try tempStore()
-    s.set("me", "UME")
+    try s.setValue("me", "UME")
     try s.put(conversations: [conv("C1", "eng", lastRead: "100.0")], me: "UME")
     try s.put(messages: [
         msg("099.0", "U2", "old"), msg("101.0", "U2", "new one"), msg("102.0", "UME", "mine"),

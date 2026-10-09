@@ -358,47 +358,4 @@ public enum Mrkdwn {
         }
         return blk(parse(s))
     }
-
-    // MARK: compatibility until SHELL moves off it
-
-    public enum Run: Equatable {
-        case text(String)
-        case mention(String)
-        case channel(String)
-        case link(label: String, url: String)
-    }
-
-    public static func runs(_ s: String, names: (String) -> String) -> [Run] {
-        var out: [Run] = []
-        var rest = Substring(s)
-        while let open = rest.firstIndex(of: "<") {
-            if open > rest.startIndex { out.append(.text(unescapeOld(rest[..<open]))) }
-            guard let close = rest[open...].firstIndex(of: ">") else { break }
-            let inner = String(rest[rest.index(after: open)..<close])
-            out.append(oldToken(inner, names: names))
-            rest = rest[rest.index(after: close)...]
-        }
-        if !rest.isEmpty { out.append(.text(unescapeOld(rest))) }
-        return out
-    }
-
-    private static func oldToken(_ inner: String, names: (String) -> String) -> Run {
-        let parts = inner.split(separator: "|", maxSplits: 1).map(String.init)
-        let head = parts.first ?? ""
-        let label = parts.count > 1 ? unescapeOld(Substring(parts[1])) : nil
-        if head.hasPrefix("@") { return .mention("@" + (label ?? names(String(head.dropFirst())))) }
-        if head.hasPrefix("#") { return .channel("#" + (label ?? String(head.dropFirst()))) }
-        if head.hasPrefix("!") {
-            let cmd = head.dropFirst()
-            if cmd.hasPrefix("subteam^") { return .mention(label ?? "@group") }
-            return .mention(label ?? "@" + (cmd.split(separator: "^").first.map(String.init) ?? String(cmd)))
-        }
-        let url = unescapeOld(Substring(head))
-        return .link(label: label ?? url.replacingOccurrences(of: "mailto:", with: ""), url: url)
-    }
-
-    static func unescapeOld(_ s: Substring) -> String {
-        let u = Array(s.unicodeScalars)
-        return unescape(u, 0, u.count)
-    }
 }

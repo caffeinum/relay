@@ -141,7 +141,7 @@ final class Composer: NSView, NSTextViewDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        NotificationCenter.default.removeObserver(self)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didUpdateNotification, object: nil)
         guard let w = window else { return }
         NotificationCenter.default.addObserver(self, selector: #selector(responderMaybeChanged), name: NSWindow.didUpdateNotification, object: w)
     }

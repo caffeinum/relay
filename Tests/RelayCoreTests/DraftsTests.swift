@@ -63,6 +63,6 @@ import Testing
 
 @Test func uiKeysDoNotCollideWithLegacyKV() throws {
     let s = try makeStore()
-    s.set("ui.current", "C1")
+    try s.setValue("ui.current", "C1")
     #expect(try s.ui(.current) == nil)
 }

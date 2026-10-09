@@ -153,6 +153,7 @@ final class Palette: Overlay, NSTableViewDataSource, NSTableViewDelegate, NSText
         var out: [Row] = []
         for (i, s) in sections.enumerated() {
             if let only, s.prefix != only { continue }
+            if only == nil, s.dynamic != nil, s.prefix != nil { continue }
             var items: [Item]
             if let d = s.dynamic {
                 items = d(q)

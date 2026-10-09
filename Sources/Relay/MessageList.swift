@@ -120,10 +120,6 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     private var stillCursor: DispatchWorkItem?
     private var bottomTimer: DispatchWorkItem?
 
-    // compatibility until SHELL moves to `context` / `actions` / `show(_:mode:)`
-    var names: (String) -> String { get { context.name } set { context.name = newValue } }
-    var onNearTop: (() -> Void)?
-    var onOpen: ((Int) -> Void)?
     let empty = NSTextField(labelWithString: "")
 
     override var isFlipped: Bool { true }
@@ -211,14 +207,6 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             for l in e.body.links { out.append(LinkRef(url: l.url, label: l.label, ts: e.message.ts, author: e.message.author)) }
         }
         return out
-    }
-
-    /// Compatibility: keeps the cursor on the same message when it's still
-    /// there, and otherwise lands on `cursor` (default: the last row).
-    func show(_ ms: [Message], keep: Bool = true, cursor: Int? = nil) {
-        if keep { show(ms, mode: .keep); return }
-        if let cursor, cursor < ms.count { show(ms, mode: .at(ts: ms[cursor].ts)); return }
-        show(ms, mode: .open(unreadAfter: nil, restore: nil))
     }
 
     func show(_ ms: [Message], mode: ShowMode) {
@@ -326,7 +314,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
             return
         }
         select(s + d)
-        if s + d < 0 { onNearTop?(); actions.nearTop() }
+        if s + d < 0 { actions.nearTop() }
     }
 
     func scrollToBottom() {
@@ -680,7 +668,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
 
     @objc private func scrolled() {
         let visible = scroll.contentView.bounds
-        if visible.minY < 40, !messages.isEmpty { onNearTop?(); actions.nearTop() }
+        if visible.minY < 40, !messages.isEmpty { actions.nearTop() }
         updateOverlays()
         if mouseInside, let w = window {
             mouse(at: table.convert(w.mouseLocationOutsideOfEventStream, from: nil))
@@ -1035,6 +1023,6 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     @objc private func doubleClicked() {
         let r = table.clickedRow
         guard r >= 0, r < items.count, case .message(let i, _) = items[r] else { return }
-        onOpen?(i)
+        actions.openThread(messages[i])
     }
 }

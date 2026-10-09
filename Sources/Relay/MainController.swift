@@ -14,7 +14,8 @@ final class MainController: NSObject, NSWindowDelegate {
     let store: Store
     let sync: Sync?
     let outbox: Outbox?
-    let live: Live?
+    private(set) var live: Live?
+    private let appToken: () -> String?
     let writes: Bool
     let syncProblem: String?
 
@@ -52,14 +53,14 @@ final class MainController: NSObject, NSWindowDelegate {
     lazy var mentionIndex: MentionSearch = buildMentionIndex()
     var mentionIndexStale = true
 
-    init(config: Config, workspace: String, store: Store, sync: Sync?, appToken: String?, syncProblem: String?) {
+    init(config: Config, workspace: String, store: Store, sync: Sync?, appToken: @escaping () -> String?, syncProblem: String?) {
         self.config = config
         self.workspace = workspace
         self.store = store
         self.sync = sync
         self.writes = sync?.slack.writes ?? false
         self.outbox = sync.map { Outbox(store: store, slack: $0.slack) }
-        self.live = sync.map { Live(store: store, sync: $0, appToken: appToken) }
+        self.appToken = appToken
         self.syncProblem = syncProblem
         window = KeyWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
                            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -171,9 +172,6 @@ final class MainController: NSObject, NSWindowDelegate {
         sync?.onError = { [weak self] e in self?.failed(e) }
         outbox?.onChange = { [weak self] s in self?.cacheChanged(s) }
         outbox?.onError = { [weak self] item, e in self?.outboxFailed(item, e) }
-        live?.onChange = { [weak self] s in self?.cacheChanged(s) }
-        live?.onError = { [weak self] e in self?.failed(e) }
-        live?.onStatus = { [weak self] s in self?.liveChanged(s) }
     }
 
     // MARK: first frame
@@ -225,10 +223,28 @@ final class MainController: NSObject, NSWindowDelegate {
             try await s.all(first: first)
             await s.directory()
         }
-        live?.watch(channel: current?.id, thread: threadTS)
-        live?.start()
+        startLive(sync)
         if let id = current?.id { sync.members(id) }
         NotificationCenter.default.addObserver(self, selector: #selector(activated), name: NSApplication.didBecomeActiveNotification, object: nil)
+    }
+
+    /// The app token is a keychain read (a process spawn), so it happens
+    /// off main, after the first frame.
+    private func startLive(_ sync: Sync) {
+        let source = appToken
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let token = source()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let l = Live(store: self.store, sync: sync, appToken: token)
+                l.onChange = { [weak self] s in self?.cacheChanged(s) }
+                l.onError = { [weak self] e in self?.failed(e) }
+                l.onStatus = { [weak self] s in self?.liveChanged(s) }
+                self.live = l
+                l.watch(channel: self.current?.id, thread: self.threadTS)
+                l.start()
+            }
+        }
     }
 
     /// Back in front: catch up on the open channel, and everything if it's been a while.
@@ -453,6 +469,7 @@ final class MainController: NSObject, NSWindowDelegate {
         threadComposer.flushDraft()
         threadComposer.switchTo(channel: "", thread: nil, draft: nil, decode: decodeDraft)
         threadTS = nil
+        thread.show([], mode: .open(unreadAfter: nil, restore: nil))
         threadPane.isHidden = true
         threadWidth.constant = 0
         setUI(.openThread, nil)

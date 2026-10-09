@@ -217,3 +217,16 @@ private func isWriteBlocked(_ e: Error) -> Bool {
     #expect(throws: OutboxError.self) { try outbox.delete(theirs) }
     #expect(try outbox.items().isEmpty)
 }
+
+@Test func threadReplyBumpsTheParentSummary() async throws {
+    let fake = FakeSlack { c in c.method == "chat.postMessage" ? posted(c) : [:] }
+    let s = try seeded()
+    let outbox = Outbox(store: s, slack: fake.client(writes: true), undoSeconds: 3600)
+    let before = try #require(try s.message("C1", ts: "101.000000")).replyCount
+    let item = try outbox.send(channel: "C1", thread: "101.000000", text: "in thread")
+    await outbox.fire(item.id)
+    let parent = try #require(try s.message("C1", ts: "101.000000"))
+    #expect(parent.replyCount == before + 1)
+    #expect(parent.latestReply == "200.000000")
+    #expect(try s.messages("C1").contains { $0.text == "in thread" } == false)
+}

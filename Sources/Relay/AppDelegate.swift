@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             problem = "\(error)"
             log("no sync: \(error)")
         }
-        let m = MainController(config: config, workspace: name, store: store, sync: sync, appToken: Config.appToken(name, ws), syncProblem: problem)
+        let m = MainController(config: config, workspace: name, store: store, sync: sync, appToken: { Config.appToken(name, ws) }, syncProblem: problem)
         m.onSwitchWorkspace = { [weak self] w in self?.switchTo(w) }
         return m
     }
