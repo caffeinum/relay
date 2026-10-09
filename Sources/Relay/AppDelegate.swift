@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let config = try Config.load()
             main = try controller(config)
         } catch {
+            if Launch.headless {
+                FileHandle.standardError.write(Data("\(Brand.name) can't start: \(error)\n".utf8))
+                exit(1)
+            }
             let a = NSAlert()
             a.messageText = "\(Brand.name) can't start"
             a.informativeText = "\(error)"
