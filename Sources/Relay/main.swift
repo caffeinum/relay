@@ -20,7 +20,7 @@ enum Launch {
     /// RELAY_HEADLESS, or ~/.config/relay/headless existing: the latter keeps
     /// every run off screen while someone is at the machine, whoever starts it.
     static let headless = Brand.env("HEADLESS") != nil
-        || FileManager.default.fileExists(atPath: Paths.config.deletingLastPathComponent().appendingPathComponent("headless").path)
+        || FileManager.default.fileExists(atPath: NSHomeDirectory() + "/.config/\(Brand.slug)/headless")
     static var marks: [(String, Double)] = []
     static var firstFrame: Double = 0
     static func mark(_ s: String) { if bench { marks.append((s, sinceStart)) } }
