@@ -47,3 +47,4 @@ for c in $ENG $GEN; do api aleks conversations.invite channel=$c users=U0DEPLOY0
 bot $ENG ":rocket: deployed \`relay@a283cda\` to staging" || echo "deploybot: post failed"
 bot $ENG "build #61 *green* in 4m12s" || echo "deploybot: post failed"
 echo "slack emulator on $URL (tmux: relay-emulator-$PORT), seeded"
+if [ -n "${SEED_RICH:-}" ]; then PORT=$PORT ./seed-render.sh; fi
