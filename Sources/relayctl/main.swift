@@ -10,11 +10,24 @@ usage: \(Brand.cli) [-w workspace] <command>
   init                    write a starter \(Paths.config.path)
   auth                    auth.test against the workspace
   sync                    pull people, conversations and new messages into the cache
+  directory               refresh user groups and custom emoji now
   channels                conversations from the cache, unread first
+  people                  people and bots from the cache
   history <#name|id> [n]  last n messages from the cache
   thread <#name|id> <ts>  fetch and print a thread
   search <words>          local fts search
   rsearch <words>         Slack's search.messages
+  send <#c> <text> [--thread ts]   post through the outbox (no undo window)
+  edit <#c> <ts> <text>   chat.update one of my messages through the outbox
+  delete <#c> <ts>        chat.delete one of my messages through the outbox
+  react <#c> <ts> <name>  toggle my reaction
+  mark <#c> [ts]          conversations.mark (default: the newest message)
+  outbox                  every outbox item
+  drafts                  every draft, newest first
+  draft <#c> [--thread ts] [text]  show, or save (empty text deletes)
+  live                    connect (socket mode, else polling) and print events
+  seed-bench [--force]    write a 100k-message db as workspace "bench"
+  perf                    p50/p95 of the per-frame store reads (use -w bench)
   bench [n]               launch the app n times and report first-frame times
 """
 
@@ -31,7 +44,22 @@ if args.first == "-w" {
     args.removeFirst(2)
 }
 guard let cmd = args.first else { print(usage); exit(0) }
-let rest = Array(args.dropFirst())
+var rest = Array(args.dropFirst())
+
+/// Pulls `--name value` out of rest.
+func option(_ name: String) -> String? {
+    guard let i = rest.firstIndex(of: name) else { return nil }
+    guard i + 1 < rest.count else { fail("\(name) needs a value") }
+    let v = rest[i + 1]
+    rest.removeSubrange(i...(i + 1))
+    return v
+}
+
+func flag(_ name: String) -> Bool {
+    guard let i = rest.firstIndex(of: name) else { return false }
+    rest.remove(at: i)
+    return true
+}
 
 func open() throws -> (Store, Sync) {
     let config = try Config.load()
@@ -48,6 +76,11 @@ func resolve(_ s: String, _ store: Store) throws -> Conversation {
     return c
 }
 
+func cached(_ c: Conversation, _ ts: String, _ store: Store) throws -> Message {
+    guard let m = try store.message(c.id, ts: ts) else { fail("no message \(ts) in \(c.label) in the cache; run sync") }
+    return m
+}
+
 func time(_ ts: String) -> String {
     let f = DateFormatter()
     f.dateFormat = "yyyy-MM-dd HH:mm"
@@ -55,8 +88,14 @@ func time(_ ts: String) -> String {
 }
 
 func show(_ m: Message, _ store: Store, indent: String = "") {
-    let thread = m.replyCount > 0 ? "  [\(m.replyCount) replies]" : ""
-    print("\(indent)\(time(m.ts)) \(m.ts) \(m.author): \(Mrkdwn.plain(m.text, names: store.name(of:)))\(thread)")
+    var tags: [String] = []
+    if m.replyCount > 0 { tags.append("\(m.replyCount) replies") }
+    if m.edited { tags.append("edited") }
+    if m.isBot { tags.append("bot") }
+    if !m.reactions.isEmpty { tags.append(m.reactions.map { ":\($0.name): \($0.count)" }.joined(separator: " ")) }
+    if let l = m.local { tags.append("\(l.kind.rawValue) \(l.state.rawValue)" + (l.error.map { ": \($0)" } ?? "")) }
+    let suffix = tags.isEmpty ? "" : "  [\(tags.joined(separator: ", "))]"
+    print("\(indent)\(time(m.ts)) \(m.ts) \(m.author): \(Mrkdwn.plain(m.text, names: store.name(of:)))\(suffix)")
 }
 
 func main() async throws {
@@ -74,11 +113,20 @@ func main() async throws {
         let t = Date()
         try await sync.all()
         print(String(format: "synced %d conversations, %d messages cached, %.1fs", try store.conversations().count, store.messageCount, Date().timeIntervalSince(t)))
+    case "directory":
+        let (store, sync) = try open()
+        await sync.directory(force: true)
+        print("usergroups: \(try store.usergroups().count)" + (store.get("usergroups.unavailable").map { " (unavailable: \($0))" } ?? ""))
+        print("emoji: \(try store.customEmoji().count)" + (store.get("emoji.unavailable").map { " (unavailable: \($0))" } ?? ""))
     case "channels":
         let (store, _) = try open()
         for c in try store.conversations().sorted(by: { ($0.unread > 0 ? 1 : 0, $0.latest) > ($1.unread > 0 ? 1 : 0, $1.latest) }) {
-            print("\(c.id)\t\(c.kind.rawValue)\t\(c.unread)\t\(c.label)")
+            let marks = [c.hasDraft ? "draft" : nil, c.isSelf ? "self" : nil, c.userIsBot ? "bot" : nil].compactMap { $0 }
+            print("\(c.id)\t\(c.kind.rawValue)\t\(c.unread)\t\(c.mentions)\t\(c.label)" + (marks.isEmpty ? "" : "\t[\(marks.joined(separator: ","))]"))
         }
+    case "people":
+        let (store, _) = try open()
+        for p in try store.people() { print("\(p.id)\t@\(p.handle)\t\(p.label)" + (p.isBot ? "\tbot" : "") + (p.image48 != nil ? "\tavatar" : "")) }
     case "history":
         guard let name = rest.first else { fail("history needs a conversation") }
         let (store, _) = try open()
@@ -96,59 +144,20 @@ func main() async throws {
         let q = rest.joined(separator: " ")
         let hits = cmd == "search" ? try store.search(q) : try await sync.remoteSearch(q)
         for h in hits { print("\(time(h.ts)) \(h.channelName) \(h.author): \(Mrkdwn.plain(h.text, names: store.name(of:)))") }
+    case "send", "edit", "delete", "react", "mark", "outbox", "drafts", "draft":
+        try await writes(cmd)
+    case "live":
+        try await live()
+    case "seed-bench":
+        try seedBench(force: flag("--force"))
+    case "perf":
+        try perf()
     case "bench":
         try bench(Int(rest.first ?? "") ?? 5)
     default:
         print(usage)
         exit(2)
     }
-}
-
-/// Cold start, two ways: the app's own report (kernel process start to
-/// its first frame committed) and, seen from outside, spawn until the
-/// window is on screen.
-func bench(_ n: Int) throws {
-    let exe = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        .appendingPathComponent("\(Brand.name).app/Contents/MacOS/\(Brand.name)")
-    guard FileManager.default.isExecutableFile(atPath: exe.path) else { fail("no app at \(exe.path); run ./build.sh") }
-    var seen: [Double] = [], reported: [Double] = []
-    let prefix = Brand.slug.uppercased()
-    for i in 0..<n {
-        let p = Process()
-        p.executableURL = exe
-        var env = ProcessInfo.processInfo.environment
-        env["\(prefix)_BENCH"] = "1"
-        env["\(prefix)_BENCH_HOLD"] = "1"
-        p.environment = env
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        let t0 = DispatchTime.now()
-        try p.run()
-        let pid = p.processIdentifier
-        var onscreen: Double?
-        while p.isRunning, onscreen == nil {
-            let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-            if info.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == pid && (($0[kCGWindowBounds as String] as? [String: Double])?["Height"] ?? 0) > 200 }) {
-                onscreen = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e6
-            }
-            usleep(500)
-        }
-        p.waitUntilExit()
-        let line = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        let rep = line.split(separator: " ").first { $0.hasPrefix("first_frame_ms=") }.flatMap { Double($0.dropFirst(15)) }
-        print(String(format: "run %d: on screen %.0fms, app reports %.0fms", i + 1, onscreen ?? -1, rep ?? -1))
-        if let onscreen { seen.append(onscreen) }
-        if let rep { reported.append(rep) }
-        usleep(300_000)
-    }
-    func line(_ name: String, _ v: [Double]) {
-        let s = v.sorted()
-        guard !s.isEmpty else { print("\(name): no samples"); return }
-        print(String(format: "%@: median %.0fms, min %.0fms, max %.0fms (n=%d)", name, s[s.count / 2], s[0], s[s.count - 1], s.count))
-    }
-    line("first frame (app)", reported)
-    line("on screen (outside)", seen)
 }
 
 do { try await main() } catch { fail("\(error)") }

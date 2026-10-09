@@ -135,6 +135,8 @@ public final class Live {
     public var onChange: ((Set<String>) -> Void)?
     /// Main queue.
     public var onError: ((Error) -> Void)?
+    /// Main queue: each applied event's type ("message/message_changed") and the channels it touched.
+    public var onEvent: ((String, Set<String>) -> Void)?
 
     public var pollInterval: TimeInterval = 10
     static let maxBackoff: Double = 60
@@ -253,7 +255,12 @@ public final class Live {
                 let touched = try EventApplier.applied(data, to: store)
                 let ms = Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e6
                 if ms > 2 { log(String(format: "socket mode: event apply took %.1fms", ms)) }
-                if let touched { changed(touched) }
+                if let touched {
+                    changed(touched)
+                    let event = (payload as? [String: Any])?["event"] as? [String: Any]
+                    let kind = [event?["type"] as? String, event?["subtype"] as? String].compactMap { $0 }.joined(separator: "/")
+                    if let onEvent { DispatchQueue.main.async { onEvent(kind, touched) } }
+                }
             } catch { fail(error) }
         }
     }
