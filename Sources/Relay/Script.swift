@@ -32,10 +32,28 @@ enum Script {
         case "appearance": NSApp.appearance = NSAppearance(named: arg == "light" ? .aqua : .darkAqua)
         case "me": main.list.context.me = main.store.me; main.thread.context.me = main.store.me
         case "timing": print("script:", main.list.lastShowTiming)
+        case "open": if let c = main.sidebar.allConversations.first(where: { $0.label == arg || $0.name == arg || $0.id == arg }) { main.open(c.id) } else { print("script: no conversation \(arg)") }
+        case "thread": if let i = Int(arg).map({ $0 < 0 ? main.list.messages.count + $0 : $0 }), main.list.messages.indices.contains(i) { main.list.select(i); main.openThread() }
+        case "select": if let i = Int(arg).map({ $0 < 0 ? main.focusedList.messages.count + $0 : $0 }) { main.focusedList.select(i) }
+        case "focus": arg == "thread" ? main.threadComposer.focus() : arg == "list" ? { main.window.makeFirstResponder(nil) }() : main.composer.focus()
+        case "run": if let id = CommandID(rawValue: arg) { main.run(id) } else { print("script: no command \(arg)") }
+        case "palette": main.showPalette(query: arg)
+        case "state": state(main, arg)
         case "quit": NSApp.terminate(nil)
         default: print("script: unknown step \(step)")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { next(rest, main) }
+    }
+
+    /// One line a test can grep: what's open, what the composers hold, the last toast.
+    private static func state(_ main: MainController, _ label: String) {
+        let pal = (main.overlay as? Palette)?.itemTitles.prefix(12).joined(separator: " | ") ?? ""
+        let msgs = main.list.messages.suffix(3).map { "\($0.author): \($0.text)\($0.edited ? " (edited)" : "")\($0.local.map { " [\($0.kind.rawValue) \($0.state.rawValue)]" } ?? "")\($0.reactions.isEmpty ? "" : " " + $0.reactions.map { ":\($0.name):\($0.count)" }.joined(separator: ","))" }
+        print("state \(label): current=\(main.current?.label ?? "-") thread=\(main.threadTS ?? "-") composer=\(main.composer.textView.mrkdwn.debugDescription) threadComposer=\(main.threadComposer.textView.mrkdwn.debugDescription) toast=\(main.toast.last ?? "-")")
+        print("  last: \(msgs.joined(separator: " || "))")
+        if !main.thread.messages.isEmpty { print("  thread: \(main.thread.messages.map { "\($0.author): \($0.text)" }.joined(separator: " || "))") }
+        if !pal.isEmpty { print("  palette: \(pal)") }
+        fflush(stdout)
     }
 
     static let codes: [String: UInt16] = ["esc": 53, "return": 36, "down": 125, "up": 126, "space": 49, "right": 124, "left": 123, "home": 115, "end": 119, "pageup": 116, "pagedown": 121, "tab": 48]

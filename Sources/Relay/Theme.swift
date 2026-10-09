@@ -44,6 +44,23 @@ enum Theme {
     static let accentPill = token("accentPill", hex(0xBE79EC), hex(0x7C3AED))
     static let success = token("success", hex(0x2BAC76), hex(0x007A5A))
 
+    // sidebar theme (§1.1, the screenshot's olive)
+    static let sbBg = token("sbBg", hex(0x161C0E), hex(0xF8F8F8))
+    static let sbTopBar = token("sbTopBar", hex(0x252E07), hex(0xECECEC))
+    static let sbText = token("sbText", hex(0xB5C380), hex(0x616061))
+    static let sbTextUnread = token("sbTextUnread", hex(0xFFFFFF), hex(0x1D1C1D))
+    static let sbHover = token("sbHover", hex(0xFFFFFF, 0.06), hex(0x000000, 0.05))
+    static let sbSelectedBg = token("sbSelectedBg", hex(0xBAFCC1), hex(0x1164A3))
+    static let sbSelectedText = token("sbSelectedText", hex(0x0E1B05), hex(0xFFFFFF))
+    static let sbSeparator = token("sbSeparator", hex(0x22271A), hex(0xE2E2E2))
+    static let sbFieldBg = token("sbFieldBg", hex(0xFFFFFF, 0.08), hex(0xFFFFFF))
+    static let sbFieldBorder = token("sbFieldBorder", hex(0x3C432C), hex(0xDDDDDD))
+    static let sbFieldFocus = token("sbFieldFocus", hex(0x9ACCE8), hex(0x1D9BD1))
+    static let sbBadge = token("sbBadge", hex(0xBE79EC), hex(0xE01E5A))
+    static let paneDivider = token("paneDivider", hex(0x3C432C), hex(0xDDDDDD))
+    static let searchPill = token("searchPill", hex(0xFFFFFF, 0.18), hex(0xFFFFFF))
+    static let star = hex(0xECB22E)
+
     // MARK: type (§1.2)
 
     enum Font {
@@ -65,6 +82,10 @@ enum Theme {
         static let dividerLabel = NSFont.systemFont(ofSize: 11, weight: .bold)
         static let dayPill = NSFont.systemFont(ofSize: 12, weight: .semibold)
         static let emoji = NSFont.systemFont(ofSize: 15)
+        static let sbRow = NSFont.systemFont(ofSize: 14)
+        static let sbRowUnread = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        static let sbHeader = NSFont.systemFont(ofSize: 14, weight: .medium)
+        static let field = NSFont.systemFont(ofSize: 13)
 
         static func italic(_ f: NSFont) -> NSFont {
             NSFont(descriptor: f.fontDescriptor.withSymbolicTraits(.italic), size: f.pointSize) ?? f
@@ -107,6 +128,31 @@ enum Glyphs {
         }
     }
 
+    /// A padlock in a 16pt box, for private channels.
+    static func lock(in r: NSRect, _ color: NSColor) {
+        color.set()
+        let body = NSRect(x: r.midX - 4.5, y: r.midY - 1, width: 9, height: 7)
+        NSBezierPath(roundedRect: body, xRadius: 1.5, yRadius: 1.5).fill()
+        let shackle = NSBezierPath(roundedRect: NSRect(x: r.midX - 3, y: r.midY - 6, width: 6, height: 9), xRadius: 3, yRadius: 3)
+        shackle.lineWidth = 1.5
+        shackle.stroke()
+    }
+
+    /// A magnifying glass in `r` (flipped coordinates).
+    static func magnifier(in r: NSRect, _ color: NSColor) {
+        color.setStroke()
+        let d = r.width * 0.62
+        let ring = NSBezierPath(ovalIn: NSRect(x: r.minX, y: r.minY, width: d, height: d))
+        ring.lineWidth = 1.4
+        ring.stroke()
+        let h = NSBezierPath()
+        h.move(to: NSPoint(x: r.minX + d * 0.85, y: r.minY + d * 0.85))
+        h.line(to: NSPoint(x: r.maxX - 1, y: r.maxY - 1))
+        h.lineWidth = 1.6
+        h.lineCapStyle = .round
+        h.stroke()
+    }
+
     static func chevronDown(in r: NSRect, _ color: NSColor, flipped: Bool = true) {
         let p = NSBezierPath()
         let w: CGFloat = 7, h: CGFloat = 3.5
@@ -126,8 +172,15 @@ enum Glyphs {
 enum Symbols {
     /// Loads the symbol catalog off main, after the first frame.
     static func warm() {
-        DispatchQueue.global(qos: .utility).async { _ = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil) }
+        DispatchQueue.global(qos: .utility).async {
+            _ = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil)
+            DispatchQueue.main.async { ready = true; NotificationCenter.default.post(name: warmed, object: nil) }
+        }
     }
+
+    /// Views that skip symbols on the first frame redraw when this posts.
+    static let warmed = Notification.Name("SymbolsWarmed")
+    private(set) static var ready = false
 
     private struct Key: Hashable { let name: String; let size: CGFloat; let weight: NSFont.Weight.RawValue }
     private static var cache: [Key: NSImage] = [:]

@@ -33,6 +33,7 @@ final class InlineEditor: NSView, NSTextViewDelegate {
         scroll.documentView = textView
         box.addSubview(scroll)
         textView.delegate = self
+        guard !(textView is ComposerTextView) else { configureRest(); return }
         textView.font = Theme.Font.body
         textView.textColor = Theme.text
         textView.insertionPointColor = Theme.textStrong
@@ -43,6 +44,10 @@ final class InlineEditor: NSView, NSTextViewDelegate {
         textView.textContainer?.lineFragmentPadding = 0
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
+        configureRest()
+    }
+
+    private func configureRest() {
         hint.font = Theme.Font.small
         hint.textColor = Theme.textMuted
         addSubview(hint)
@@ -61,9 +66,9 @@ final class InlineEditor: NSView, NSTextViewDelegate {
     }
     override var wantsUpdateLayer: Bool { true }
 
-    func begin(_ m: Message, text: String) {
+    func begin(_ m: Message, text: String, tokens: [MentionToken]) {
         message = m
-        textView.string = text
+        if let c = textView as? ComposerTextView { c.load(text, tokens: tokens) } else { textView.string = text }
         textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
         isHidden = false
         needsDisplay = true
@@ -101,8 +106,8 @@ final class InlineEditor: NSView, NSTextViewDelegate {
 
     private func commit() {
         guard let m = message else { return }
-        let text = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        onSave?(m, Mentions.encode(text, tokens: []))
+        let mrkdwn = (textView as? ComposerTextView)?.mrkdwn ?? Mentions.encode(textView.string, tokens: [])
+        onSave?(m, mrkdwn.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     func textDidChange(_ notification: Notification) { onHeight?() }

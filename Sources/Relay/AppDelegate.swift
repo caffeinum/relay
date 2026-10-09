@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             problem = "\(error)"
             log("no sync: \(error)")
         }
-        let m = MainController(config: config, workspace: name, store: store, sync: sync, syncProblem: problem)
+        let m = MainController(config: config, workspace: name, store: store, sync: sync, appToken: Config.appToken(name, ws), syncProblem: problem)
         m.onSwitchWorkspace = { [weak self] w in self?.switchTo(w) }
         return m
     }
@@ -75,6 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             config.workspace = name
             try config.save()
             let old = main
+            old?.saveState()
+            old?.live?.stop()
             main = try controller(config)
             old?.window.orderOut(nil)
             main.showFirstFrame()
@@ -83,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             main.toast.show("\(error)", error: true)
         }
     }
+
+    func applicationWillTerminate(_ notification: Notification) { main?.saveState() }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
 
@@ -100,6 +104,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editItem = NSMenuItem()
         bar.addItem(editItem)
         let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(.separator())
         edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")

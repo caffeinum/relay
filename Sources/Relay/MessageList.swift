@@ -91,7 +91,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
     var actions = MessageActions()
     var inThread = false
     var focused = true { didSet { if focused != oldValue { updateSelectionStyle() } } }
-    var makeEditorTextView: () -> NSTextView = { NSTextView(frame: .zero) }
+    var makeEditorTextView: () -> NSTextView = { ComposerTextView() }
 
     private(set) var messages: [Message] = []
     private var items: [ListItem] = []
@@ -174,7 +174,6 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         jumpTop.onClick = { [weak self] p in self?.jumpTopClicked(p) }
         jumpBottom.onClick = { [weak self] _ in self?.scrollToBottom() }
         jumpBottom.kind = .bottom(newCount: 0)
-        Avatars.shared.onLoad = { [weak self] id in self?.avatarLoaded(id) }
         _ = Body.pBody
     }
 
@@ -356,19 +355,19 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         guard table.visibleRect.intersects(table.rect(ofRow: r)) else { return false }
         cancelEdit()
         let m = messages[i]
-        let text = Mentions.decode(m.text) { [context] t in
+        let decoded = Mentions.decode(m.text) { [context] t in
             switch t {
             case .user(let id): return context.name(id)
             case .channel(let id): return context.channelName(id)
             case .group(let id): return context.groupHandle(id)
             case .special(let s): return s
             }
-        }.text
+        }
         stillCursor?.cancel()
         hoveredRow = nil
         hoverBar.isHidden = true
         editingTS = ts
-        editor.begin(m, text: text)
+        editor.begin(m, text: decoded.text, tokens: decoded.tokens)
         editorHeight = editor.height(width: entries[i].geo?.contentWidth ?? 300)
         table.noteHeightOfRows(withIndexesChanged: [r])
         table.reloadData(forRowIndexes: [r], columnIndexes: [0])
@@ -590,7 +589,7 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         table.reloadData()
     }
 
-    private func avatarLoaded(_ id: String) {
+    func avatarLoaded(_ id: String) {
         let rows = table.rows(in: table.visibleRect)
         for r in rows.location..<(rows.location + rows.length) where r < items.count {
             guard case .message(let i, false) = items[r], messages[i].user == id || messages[i].botID == id,
@@ -653,6 +652,8 @@ final class MessageList: NSView, NSTableViewDataSource, NSTableViewDelegate {
         super.viewDidEndLiveResize()
         if let w = deferredRelayout { w.cancel(); deferredRelayout = nil; DispatchQueue.main.async { w.perform() } }
     }
+
+    var atBottom: Bool { isAtBottom }
 
     private var isAtBottom: Bool {
         let visible = scroll.contentView.bounds

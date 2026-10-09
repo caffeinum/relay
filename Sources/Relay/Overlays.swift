@@ -20,7 +20,7 @@ class PickerOverlay: Overlay, NSTableViewDataSource, NSTableViewDelegate, NSText
         field.drawsBackground = false
         field.delegate = self
         note.font = .systemFont(ofSize: 11)
-        note.textColor = Palette.secondary
+        note.textColor = Theme.textMuted
         let scroll: NSScrollView
         (scroll, table) = makeTable(self, rowHeight: 40)
         table.target = self
@@ -93,7 +93,7 @@ class PickerOverlay: Overlay, NSTableViewDataSource, NSTableViewDelegate, NSText
         t.lineBreakMode = .byTruncatingTail
         let d = NSTextField(labelWithString: items[row].detail)
         d.font = .systemFont(ofSize: 11.5)
-        d.textColor = Palette.secondary
+        d.textColor = Theme.textMuted
         d.lineBreakMode = .byTruncatingTail
         for v in [t, d] { v.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(v) }
         NSLayoutConstraint.activate([
@@ -105,28 +105,6 @@ class PickerOverlay: Overlay, NSTableViewDataSource, NSTableViewDelegate, NSText
             d.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -12),
         ])
         return cell
-    }
-}
-
-/// ⌘K: jump to any conversation, or run a command.
-final class CommandOverlay: PickerOverlay {
-    private let all: [Item]
-
-    init(_ all: [Item]) {
-        self.all = all
-        super.init(placeholder: "Jump to a channel or run a command")
-        note.stringValue = "↩ go   esc close"
-        queryChanged("")
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func queryChanged(_ q: String) {
-        let words = q.lowercased().split(separator: " ")
-        items = all.filter { item in
-            let hay = (item.title + " " + item.detail).lowercased()
-            return words.allSatisfy { hay.contains($0) }
-        }
     }
 }
 
