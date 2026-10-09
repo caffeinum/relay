@@ -27,6 +27,7 @@ let package = Package(
             name: "RelayCoreTests",
             dependencies: ["RelayCore"],
             path: "Tests/RelayCoreTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

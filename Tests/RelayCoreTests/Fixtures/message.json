@@ -1,0 +1,33 @@
+{
+  "envelope_id": "0b1c2d3e-0001-4e5f-9a8b-7c6d5e4f3a2b",
+  "type": "events_api",
+  "accepts_response_payload": false,
+  "retry_attempt": 0,
+  "retry_reason": "",
+  "payload": {
+    "token": "redacted",
+    "team_id": "T0EMU",
+    "api_app_id": "A0RELAY",
+    "event": {
+      "type": "message",
+      "channel": "C1",
+      "user": "U2",
+      "text": "fresh <@UME>",
+      "ts": "150.000000",
+      "client_msg_id": "a1b2",
+      "event_ts": "150.000000",
+      "channel_type": "channel",
+      "team": "T0EMU"
+    },
+    "type": "event_callback",
+    "event_id": "Ev00000001",
+    "event_time": 1728412400,
+    "authorizations": [
+      {
+        "team_id": "T0EMU",
+        "user_id": "UME",
+        "is_bot": false
+      }
+    ]
+  }
+}

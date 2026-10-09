@@ -39,4 +39,11 @@ DM=$(api aleks conversations.open users=$MIRA | python3 -c 'import sys,json;prin
 api mira chat.postMessage channel=$DM text="hey, got a minute for the deck?" >/dev/null
 api aleks chat.postMessage channel=$DM text="sure, after lunch" >/dev/null
 api mira chat.postMessage channel=$DM text="thanks! sending the draft now" >/dev/null
+
+# deploybot posts the way Slack bots do: its own user plus bot_id and username.
+bot() { curl -sf -X POST "$URL/api/chat.postMessage" -H "Authorization: Bearer xoxb-emu-deploybot" --data-urlencode "channel=$1" \
+  --data-urlencode "bot_id=B0DEPLOY01" --data-urlencode "username=deploybot" --data-urlencode "text=$2" >/dev/null; }
+for c in $ENG $GEN; do api aleks conversations.invite channel=$c users=U0DEPLOY01 >/dev/null || echo "deploybot: invite to $c failed"; done
+bot $ENG ":rocket: deployed \`relay@a283cda\` to staging" || echo "deploybot: post failed"
+bot $ENG "build #61 *green* in 4m12s" || echo "deploybot: post failed"
 echo "slack emulator on $URL (tmux: relay-emulator-$PORT), seeded"

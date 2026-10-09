@@ -1,0 +1,31 @@
+{
+  "envelope_id": "0b1c2d3e-0009-4e5f-9a8b-7c6d5e4f3a2b",
+  "type": "events_api",
+  "accepts_response_payload": false,
+  "retry_attempt": 0,
+  "retry_reason": "",
+  "payload": {
+    "token": "redacted",
+    "team_id": "T0EMU",
+    "api_app_id": "A0RELAY",
+    "event": {
+      "type": "im_marked",
+      "channel": "D2",
+      "ts": "2.000000",
+      "dm_count": 0,
+      "unread_count_display": 0,
+      "num_mentions_display": 0,
+      "event_ts": "158.000000"
+    },
+    "type": "event_callback",
+    "event_id": "Ev00000009",
+    "event_time": 1728412400,
+    "authorizations": [
+      {
+        "team_id": "T0EMU",
+        "user_id": "UME",
+        "is_bot": false
+      }
+    ]
+  }
+}

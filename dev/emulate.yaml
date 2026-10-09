@@ -7,12 +7,23 @@ slack:
       real_name: Aleks
       email: aleks@example.com
       is_admin: true
+      profile:
+        display_name: aleks
+        title: Founder
+        image_48: https://i.pravatar.cc/96?u=aleks
     - name: mira
       real_name: Mira Chen
       email: mira@example.com
+      profile:
+        display_name: Mira
+        title: Design
+        image_48: https://i.pravatar.cc/96?u=mira
     - name: tomas
       real_name: Tomás Ruiz
       email: tomas@example.com
+      profile:
+        title: Backend
+        image_48: https://i.pravatar.cc/96?u=tomas
   channels:
     - name: general
       topic: Company-wide
@@ -21,6 +32,15 @@ slack:
     - name: customers
       topic: Customer threads
     - name: random
+  # A bot that posts: its user is U0DEPLOY01 and its messages carry bot_id B0DEPLOY01.
+  oauth_apps:
+    - client_id: deploybot-client
+      client_secret: deploybot-secret
+      name: Deploybot
+      redirect_uris: []
+      bot_id: B0DEPLOY01
+      bot_user_id: U0DEPLOY01
+      bot_name: deploybot
   tokens:
     - token: xoxp-emu-aleks
       user: aleks
@@ -28,3 +48,7 @@ slack:
       user: mira
     - token: xoxp-emu-tomas
       user: tomas
+    - token: xoxb-emu-deploybot
+      type: bot
+      user_id: U0DEPLOY01
+      bot_id: B0DEPLOY01

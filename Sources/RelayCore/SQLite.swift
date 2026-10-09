@@ -151,6 +151,10 @@ public final class Database {
         return out
     }
 
+    public func scalar(_ sql: String, _ args: [SQLBindable]) throws -> Int {
+        try query(sql, args) { $0.int(0) }.first ?? 0
+    }
+
     public func scalar(_ sql: String, _ args: SQLBindable...) throws -> Int {
         try query(sql, args) { $0.int(0) }.first ?? 0
     }
@@ -162,16 +166,38 @@ public final class Database {
     public var changes: Int { Int(sqlite3_changes(db)) }
     public var lastInsertID: Int64 { sqlite3_last_insert_rowid(db) }
 
+    private var depth = 0
+
+    /// Nests: an inner call is a savepoint, so a helper that opens its own
+    /// transaction can run inside a caller's.
     public func transaction<T>(_ body: () throws -> T) throws -> T {
         lock.lock(); defer { lock.unlock() }
-        try exec("BEGIN IMMEDIATE")
+        let sp = "sp\(depth)"
+        try exec(depth == 0 ? "BEGIN IMMEDIATE" : "SAVEPOINT \(sp)")
+        depth += 1
         do {
             let r = try body()
-            try exec("COMMIT")
+            depth -= 1
+            try exec(depth == 0 ? "COMMIT" : "RELEASE \(sp)")
             return r
         } catch {
-            try? exec("ROLLBACK")
+            depth -= 1
+            if depth == 0 { try? exec("ROLLBACK") } else { try? exec("ROLLBACK TO \(sp)"); try? exec("RELEASE \(sp)") }
             throw error
         }
+    }
+
+    /// Runs one statement and returns how many rows it changed, read under the same lock.
+    @discardableResult
+    public func update(_ sql: String, _ args: SQLBindable...) throws -> Int {
+        lock.lock(); defer { lock.unlock() }
+        try run(sql, args)
+        return changes
+    }
+
+    public func insert(_ sql: String, _ args: SQLBindable...) throws -> Int64 {
+        lock.lock(); defer { lock.unlock() }
+        try run(sql, args)
+        return lastInsertID
     }
 }

@@ -1,0 +1,11 @@
+{
+  "type": "hello",
+  "num_connections": 1,
+  "debug_info": {
+    "host": "applink-1",
+    "approximate_connection_time": 18060
+  },
+  "connection_info": {
+    "app_id": "A0RELAY"
+  }
+}

@@ -27,9 +27,11 @@ public struct Config: Codable, Equatable {
         public var token: String?
         /// Writes (send, edit, react, mark) stay off until the owner says so.
         public var writes: Bool?
+        /// Only for emulators: a fake Socket Mode (xapp) token.
+        public var appToken: String?
 
-        public init(api: String, token: String? = nil, writes: Bool? = nil) {
-            self.api = api; self.token = token; self.writes = writes
+        public init(api: String, token: String? = nil, writes: Bool? = nil, appToken: String? = nil) {
+            self.api = api; self.token = token; self.writes = writes; self.appToken = appToken
         }
 
         public var isSlack: Bool { URL(string: api)?.host?.hasSuffix("slack.com") ?? false }
@@ -88,6 +90,16 @@ public struct Config: Codable, Equatable {
             throw ConfigError.noToken(workspace: name, account: account)
         }
         return t
+    }
+
+    public static func appTokenAccount(_ workspace: String) -> String { "\(workspace).app" }
+
+    /// The Socket Mode token: keychain `<ws>.app`, or for emulators only the
+    /// config's `appToken`. nil means live updates fall back to polling.
+    public static func appToken(_ name: String, _ w: Workspace) -> String? {
+        if !w.isSlack, let t = w.appToken { return t }
+        if w.isSlack, w.appToken != nil { log("config: \(name) has an inline appToken; ignored, real tokens live in the keychain") }
+        return Keychain.read(service: Brand.keychainService, account: appTokenAccount(name))
     }
 }
 
