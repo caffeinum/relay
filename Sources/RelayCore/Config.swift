@@ -53,8 +53,8 @@ public struct Config: Codable, Equatable {
     public static let starter = Config(
         workspace: "emulator",
         workspaces: [
-            "2027dev": Workspace(api: "https://slack.com/api"),
-            "emulator": Workspace(api: "http://localhost:4003/api", token: "xoxp-emu-aleks"),
+            "2027dev": Workspace(api: "https://slack.com/api", writes: true),
+            "emulator": Workspace(api: "http://localhost:4003/api", token: "xoxp-emu-aleks", writes: true),
         ],
         sections: [Section(name: "Customers", channels: ["customers"])])
 

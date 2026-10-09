@@ -5,7 +5,7 @@ The approved plan is in README.md.
 
 - The sibling app is ~/Github/caffeinum/mail (Reply). Reuse its patterns: Store (sqlite WAL + fts5), Outbox with undo, the keychain via /usr/bin/security, POST_SCRIPT-style UI scripting, and build.sh / test.sh.
 - The workspace is 2027dev.slack.com, through one internal Slack app with user-token scopes and Socket Mode. Do not use the browser session token (xoxc). The operator ruled it out.
-- Stay read-only against the real workspace until the operator says yes. Develop against caffeinum/emulate's Slack emulator. Ask @emulate for missing methods (search.messages, users.conversations and unread counts landed in 46b9fd2; Socket Mode is pending, beads-jgdc).
+- Writes against 2027dev are approved (operator, 2026-10-08 20:31 PDT: "implement write version from the start"). The starter config has writes:true for it. When testing writes on the real workspace, use your own DM (self-DM) or a throwaway message you delete right after; never post into others' channels or DMs as a test. Develop against caffeinum/emulate's Slack emulator. Ask @emulate for missing methods (search.messages, users.conversations and unread counts landed in 46b9fd2; Socket Mode is pending, beads-jgdc).
 - Never print tokens.
 
 ## Layout
