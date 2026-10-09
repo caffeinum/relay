@@ -165,7 +165,7 @@ public final class Store {
                     thread_ts TEXT, target_ts TEXT, local_ts TEXT NOT NULL, text TEXT, original TEXT, error TEXT,
                     created REAL NOT NULL, sends_at REAL NOT NULL, sent_ts TEXT);
                 CREATE TABLE events(id TEXT PRIMARY KEY, at REAL NOT NULL);
-                CREATE INDEX messages_top ON messages(channel, ts) WHERE thread_ts IS NULL OR thread_ts = ts;
+                CREATE INDEX messages_top ON messages(channel, ts, user, subtype) WHERE thread_ts IS NULL OR thread_ts = ts;
                 CREATE INDEX outbox_live ON outbox(channel, state);
                 PRAGMA user_version = 2;
                 """)
@@ -278,7 +278,7 @@ public final class Store {
         """
 
     static func mentionSQL(_ n: Int) -> String {
-        "SELECT count(*) FROM messages m WHERE m.channel=c.id AND m.ts > c.read AND m.user != ? AND ("
+        "SELECT count(*) FROM messages m WHERE m.channel=c.id AND m.ts > c.read AND m.user != ? AND instr(m.text, '<') > 0 AND ("
             + Array(repeating: "m.text LIKE ?", count: n).joined(separator: " OR ") + ")"
     }
 
@@ -479,16 +479,24 @@ public final class Store {
         bot_id, username, attachments, reply_users
         """
 
+    /// What every row of one read shares, looked up once.
     struct Reader {
         let me: String
         let mentions: [String]
+        let people: [String: Person]
+        let bots: [String: Bot]
         let dec = JSONDecoder()
+
+        func mentionsMe(_ text: String) -> Bool {
+            text.utf8.contains(UInt8(ascii: "<")) && mentions.contains { text.contains($0) }
+        }
     }
 
     func reader() -> Reader {
         let me = self.me ?? ""
         let groups = myGroups().sorted().map { "<!subteam^\($0)" }
-        return Reader(me: me, mentions: (me.isEmpty ? [] : ["<@\(me)>", "<@\(me)|"]) + ["<!here", "<!channel", "<!everyone"] + groups)
+        return Reader(me: me, mentions: (me.isEmpty ? [] : ["<@\(me)>", "<@\(me)|"]) + ["<!here", "<!channel", "<!everyone"] + groups,
+                      people: peopleSnapshot(), bots: botsSnapshot())
     }
 
     private func message(_ r: Row, _ ctx: Reader) -> Message {
@@ -500,15 +508,15 @@ public final class Store {
             }
         }
         let user = r.text(4), botID = r.string(11), text = r.text(5)
-        let person = user.isEmpty ? nil : self.person(user)
-        let bot = botID.flatMap(self.bot)
+        let person = user.isEmpty ? nil : ctx.people[user]
+        let bot = botID.flatMap { ctx.bots[$0] }
         let author = person?.label ?? bot?.name ?? r.string(12) ?? (user.isEmpty ? botID ?? "" : user)
         return Message(
             id: r.int64(0), channel: r.text(1), ts: r.text(2), threadTS: r.string(3), user: user, author: author, text: text,
             subtype: r.string(6), replyCount: r.int(7), latestReply: r.string(8), reactions: decode(10, [SlackReaction].self) ?? [],
             editedTS: r.string(9), botID: botID, isBot: botID != nil || person?.isBot == true,
             avatar: person?.image48 ?? bot?.image48, isMine: !ctx.me.isEmpty && user == ctx.me,
-            mentionsMe: user != ctx.me && ctx.mentions.contains { text.contains($0) },
+            mentionsMe: user != ctx.me && ctx.mentionsMe(text),
             replyUsers: Array((decode(14, [String].self) ?? []).prefix(3)),
             unfurls: (decode(13, [SlackMessage.Attachment].self) ?? []).map(Unfurl.init))
     }

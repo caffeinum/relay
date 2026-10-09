@@ -91,6 +91,19 @@ extension Store {
         }
     }
 
+    func peopleSnapshot() -> [String: Person] { peopleMap() }
+
+    func botsSnapshot() -> [String: Bot] {
+        do {
+            return try directory.bots {
+                try db.query("SELECT id, name, user_id, image_48 FROM bots") { Bot(id: $0.text(0), name: $0.text(1), userID: $0.string(2), image48: $0.string(3)) }
+            }
+        } catch {
+            log("bots: \(error)")
+            return [:]
+        }
+    }
+
     private func peopleMap() -> [String: Person] {
         do { return try directory.people(load: loadPeople) } catch {
             log("people: \(error)")
@@ -128,16 +141,7 @@ extension Store {
         directory.invalidateBots()
     }
 
-    public func bot(_ id: String) -> Bot? {
-        do {
-            return try directory.bots {
-                try db.query("SELECT id, name, user_id, image_48 FROM bots") { Bot(id: $0.text(0), name: $0.text(1), userID: $0.string(2), image48: $0.string(3)) }
-            }[id]
-        } catch {
-            log("bots: \(error)")
-            return nil
-        }
-    }
+    public func bot(_ id: String) -> Bot? { botsSnapshot()[id] }
 
     // MARK: user groups
 

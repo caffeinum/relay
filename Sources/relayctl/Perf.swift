@@ -32,7 +32,7 @@ func perf() throws {
             times.append(Double(DispatchTime.now().uptimeNanoseconds - t0.uptimeNanoseconds) / 1e6)
         }
         times.sort()
-        print(String(format: "%-28@ p50 %6.2fms  p95 %6.2fms", name as NSString, times[n / 2], times[n * 95 / 100]))
+        print(name.padding(toLength: 26, withPad: " ", startingAt: 0) + String(format: " p50 %6.2fms  p95 %6.2fms", times[n / 2], times[n * 95 / 100]))
     }
     print("\(store.messageCount) messages, \(convs.count) conversations")
     try measure("conversations()") { _ in _ = try store.conversations() }
